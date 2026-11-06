@@ -1,0 +1,13 @@
+---
+description: Tauri GUI — vanilla TS, pnpm, CLI sidecar
+globs: gui/**
+alwaysApply: false
+---
+
+# GUI
+
+- Vanilla TypeScript. No React/Vue/Svelte.
+- Python only via sidecar `autorename-pdf-cli` (`src/lib/sidecar.ts`). Do not reimplement rename/undo/config in the frontend.
+- Package manager is **pnpm** (`pnpm-lock.yaml`). `build.py` uses `pnpm install --frozen-lockfile`. Ignore `package-lock.json`.
+- CSS: Tailwind 4 CLI → `assets/css/output.css` (gitignored). `pnpm -C gui build:css`.
+- Tests: Vitest next to the module (`src/**/*.test.ts`). `pnpm -C gui test:run` / `typecheck`.
