@@ -11,7 +11,7 @@
 
 ## Rust rewrite + scanner (parked 2026-11-06)
 
-The full study is in `.todo/rust-rewrite-feasibility.md`. Note that `.todo/` is gitignored, so the file exists on this machine only. Codex (Astra) and Grok 4.7 reviewed it and both said go-with-changes.
+The full study is in [`docs/superpowers/specs/2026-11-06-rust-rewrite-feasibility.md`](docs/superpowers/specs/2026-11-06-rust-rewrite-feasibility.md). Codex (Astra) and Grok 4.7 reviewed it and both said go-with-changes.
 
 - **Verdict**: feasible and nothing is blocked. Full port plus scanner is 95–135 dev-days; scanner only, in front of the Python core, is 33–50.
 - **Spike first (5–8 days, go/no-go)**:
