@@ -37,9 +37,9 @@ The full study is in [`docs/superpowers/specs/2026-11-06-rust-rewrite-feasibilit
   - Keep the sidecar contract: stdout JSON, stderr `Processing [i/n]`, exit codes 0–11, `config inspect`.
   - Keep undo log v2 readable.
 - **Tests**: never byte-diff live LLM JSON. Gate on golden extraction text, replayed provider responses, and filename rendering with mocked metadata.
-- **GUI + CLI**: one codebase and installer, two EXEs. A single EXE can't be both a GUI and a console app on Windows, and PhraseVault also has two (Electron app + Go console relay over a named pipe, `electron-workspace/packages/shared/cli-relay`).
+- **GUI + CLI**: one codebase and installer, two EXEs. A single EXE can't be both a GUI and a console app on Windows.
   - Option A, recommended: the CLI links `crates/core` directly.
-  - Option B: PhraseVault-style relay. Only worth it if the GUI becomes a resident tray app.
+  - Option B: a thin console relay that forwards argv/stdio/exit code over a named pipe to the running GUI. Only worth it if the GUI becomes a resident tray app. The full design (protocol, discovery files, Rust sketches, security rules, 6–9 days) is in the study's appendix.
   - Either way, native PDF/OCR work runs in a worker process so a crash there can't take down the GUI.
 - **Scanner scope**: photos and scans only, no live camera.
   - **Hard gate**: on par with or better than Genius Scan, Adobe Scan and Lens.
