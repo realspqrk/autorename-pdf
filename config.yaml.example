@@ -9,7 +9,7 @@
 #
 # Required: ai.provider, ai.model, ai.api_key (empty only for ollama), company.name.
 # Recipes (GitHub only — not in the Windows ZIP):
-#   https://github.com/ptmrio/autorename-pdf/tree/main/examples
+#   https://github.com/realspqrk/autorename-pdf/tree/main/examples
 #   academic.yaml, er-ar.yaml, ollama-offline.yaml, vision-cloud.yaml, invoice-id.yaml
 # One-run override: rename --profile academic
 

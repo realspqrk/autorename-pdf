@@ -3,10 +3,10 @@
   <p><b>AI PDF renamer for invoices, scanned documents, and academic papers.</b><br>
   Turn PDF contents into filenames like <code>20260906 ACME AP 12,13.pdf</code>.</p>
   <p>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/ptmrio/autorename-pdf" alt="GitHub Release"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ptmrio/autorename-pdf" alt="MIT License"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/github/downloads/ptmrio/autorename-pdf/total" alt="Downloads"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/badge/platform-Windows-blue?logo=windows" alt="Platform: Windows"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/realspqrk/autorename-pdf" alt="GitHub Release"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/realspqrk/autorename-pdf" alt="MIT License"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/downloads/realspqrk/autorename-pdf/total" alt="Downloads"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/badge/platform-Windows-blue?logo=windows" alt="Platform: Windows"></a>
   </p>
 </div>
 
@@ -23,7 +23,7 @@ Use OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), or a local LLM throug
 | Start here | What you need |
 |----------|---------------|
 | [Windows ZIP / GUI](#quick-start) | Download the release, run setup, drag in PDFs. GUI and Explorer integration are Windows-only. |
-| [Offline / Ollama](#ollama-setup) | Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). No API key. |
+| [Offline / Ollama](#ollama-setup) | Copy [`examples/ollama-offline.yaml`](https://github.com/realspqrk/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). No API key. |
 | [Python CLI on macOS / Linux](#macos--linux) | Install from source. |
 | [Developer setup](#developer-documentation) | Tests, architecture, builds. |
 
@@ -41,7 +41,7 @@ Use OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), or a local LLM throug
 
 ## Windows Quick Start: ZIP, GUI, and Explorer
 
-1. **Download** the latest [release ZIP](https://github.com/ptmrio/autorename-pdf/releases)
+1. **Download** the latest [release ZIP](https://github.com/realspqrk/autorename-pdf/releases)
 2. **Extract** and run `setup.ps1` (right-click → "Run with PowerShell")
 3. **Configure** — copy `config.yaml.example` to `config.yaml` if setup did not, then set provider, **model**, and key together (see the table below):
    ```yaml
@@ -58,7 +58,7 @@ Use OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), or a local LLM throug
 
 ## Common Questions
 
-**Does it work offline?** Yes — Ollama + PaddleOCR. Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub.
+**Does it work offline?** Yes — Ollama + PaddleOCR. Copy [`examples/ollama-offline.yaml`](https://github.com/realspqrk/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub.
 
 **Digital, scanned, and image PDFs?** Yes. pdfplumber always runs. Turn on `pdf.ocr` and/or `pdf.vision` (`false` / `true` / `"auto"`).
 
@@ -68,7 +68,7 @@ Use OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), or a local LLM throug
 
 **Preview or undo?** GUI **Preview names**, CLI `--dry-run`, then undo. Already-correct names are skipped.
 
-**Research papers?** `profile: academic`, `rename --profile academic`, or [`examples/academic.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/academic.yaml).
+**Research papers?** `profile: academic`, `rename --profile academic`, or [`examples/academic.yaml`](https://github.com/realspqrk/autorename-pdf/blob/main/examples/academic.yaml).
 
 ## Configuration
 
@@ -86,7 +86,7 @@ The schema lives in [config.yaml.example](config.yaml.example). Copy it to `conf
 
 ### Example configs
 
-Copy a file from [`examples/`](https://github.com/ptmrio/autorename-pdf/tree/main/examples) over `config.yaml`, then set your API key and company name. Those recipes are in the GitHub repo, not in the Windows ZIP (the ZIP ships `config.yaml.example` only).
+Copy a file from [`examples/`](https://github.com/realspqrk/autorename-pdf/tree/main/examples) over `config.yaml`, then set your API key and company name. Those recipes are in the GitHub repo, not in the Windows ZIP (the ZIP ships `config.yaml.example` only).
 
 | Recipe | What it changes |
 |--------|-----------------|
@@ -222,7 +222,7 @@ Jaro-Winkler matching maps OCR typos to the canonical name. Academic profile ski
 
 ## Offline PDF Renaming with Ollama and PaddleOCR
 
-Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). Download models **before** going offline; keep Ollama running.
+Copy [`examples/ollama-offline.yaml`](https://github.com/realspqrk/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). Download models **before** going offline; keep Ollama running.
 
 ```powershell
 winget install -e --id Ollama.Ollama
@@ -245,7 +245,7 @@ Windows 10 22H2+ or Windows 11. GPU with 6+ GB VRAM recommended (CPU-only works 
 CLI: Python 3.11+. GUI and context menu: Windows-only.
 
 ```bash
-git clone https://github.com/ptmrio/autorename-pdf.git
+git clone https://github.com/realspqrk/autorename-pdf.git
 cd autorename-pdf
 python -m venv venv
 source venv/bin/activate
@@ -258,8 +258,8 @@ PaddleOCR venv and logs default to `~/.local/share/autorename-pdf/`.
 
 ## Support the Project
 
-- ⭐ [Star this repo](https://github.com/ptmrio/autorename-pdf)
-- 💖 [GitHub Sponsors](https://github.com/sponsors/ptmrio)
+- ⭐ [Star this repo](https://github.com/realspqrk/autorename-pdf)
+- 💖 [GitHub Sponsors](https://github.com/sponsors/realspqrk)
 - ☕ [Ko-fi](https://ko-fi.com/spqrk)
 - 💛 [PayPal](https://paypal.me/realSPQRK)
 
@@ -293,4 +293,4 @@ Contributions: issues and forks welcome; we are not taking PRs right now.
 
 ---
 
-MIT License — Made by [Gerhard Petermeir, SPQRK Web Solutions](https://github.com/ptmrio)
+MIT License — Made by [Gerhard Petermeir, SPQRK Web Solutions](https://github.com/realspqrk)

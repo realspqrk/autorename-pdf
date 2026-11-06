@@ -7,8 +7,8 @@ import { renderAboutView } from './about';
 import { getState, setState } from '../lib/state';
 
 const URLS = [
-  'https://github.com/ptmrio/autorename-pdf',
-  'https://github.com/ptmrio/autorename-pdf/blob/main/LICENSE',
+  'https://github.com/realspqrk/autorename-pdf',
+  'https://github.com/realspqrk/autorename-pdf/blob/main/LICENSE',
   'https://phrasevault.app',
 ];
 
