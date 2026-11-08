@@ -1,9 +1,0 @@
-# Development, testing, and build dependencies
--r requirements.txt
-pytest>=9.1.1
-pytest-cov>=7.1.0
-python-dotenv>=1.2.2
-fpdf2>=2.8.0
-pyinstaller==6.22.2
-pyinstaller-hooks-contrib==2026.7
-ruff==0.16.6

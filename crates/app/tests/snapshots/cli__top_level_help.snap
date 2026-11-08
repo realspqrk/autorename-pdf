@@ -1,0 +1,104 @@
+---
+source: crates/app/tests/cli.rs
+expression: "help(&[\"--help\"])"
+---
+Rename PDFs from their content (AI + OCR).
+
+autorename-pdf reads each PDF free-first (text layer, then offline OCR, then
+page images for vision models, each only when the previous tier is poor),
+asks one AI provider for structured fields (date, company, document type,
+total, ...) and renames the file from a profile template, e.g.
+`20240315 ACME AP 1.234,56.pdf`. By default it also embeds the extracted data
+in the PDF and learns new company-name variants. Every change is journaled
+and can be reverted with `undo`.
+
+Usage: autorename-pdf [OPTIONS] [COMMAND]
+
+Commands:
+  rename     Extract, plan and rename PDFs (+ enrich, + learn)
+  apply      Execute a saved plan (no AI calls)
+  undo       Revert renames, enrichment and learned names of a batch
+  inspect    Show embedded data, signature/encryption and text quality
+  names      Maintain the name lists (Name matching: one spelling per name)
+  config     Show, validate, locate or create the config
+  models     Manage offline OCR model packs
+  schema     Print JSON Schemas of the machine-readable documents
+  integrate  Add or remove desktop and file-manager integration
+  setup      Set up config, API key, OCR models and desktop integration (idempotent)
+  gui        Open the GUI (preview pre-loaded with PATHs)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Global options:
+      --config <FILE>
+          Config file [default: $AUTORENAME_PDF_CONFIG, else the OS config dir]
+
+  -o, --output <FORMAT>
+          Output format [default: text on a terminal, json otherwise]
+
+          Possible values:
+          - text:   Human-readable, aligned, colored on a terminal
+          - json:   One JSON document on stdout
+          - ndjson: Progress events, one JSON object per line; the last line is the result
+
+  -q, --quiet
+          No progress or notices on stderr (errors are still reported)
+
+  -v, --verbose
+          More detail on stderr
+
+      --offline
+          Privacy mode: local/LAN Ollama only, any cloud request is an error
+
+      --no-color
+          Disable colors (also: NO_COLOR, or output that is not a terminal)
+
+WORKFLOW:
+  autorename-pdf setup --api-key-env OPENAI_API_KEY --company Spqrk
+                                             # once: config + key (idempotent)
+  autorename-pdf rename --dry-run ~/Scans    # preview; changes nothing
+  autorename-pdf rename ~/Scans              # rename + enrich + learn
+  autorename-pdf undo                        # revert the last run
+
+FOR AGENTS:
+  - Setting the app up for a user: `setup --check -o json`, then `setup ...`
+    (see `setup --help`; never put API keys on the command line).
+  - Always pass `--output json` (also the default when stdout is not a TTY).
+  - Two steps: `rename --plan plan.json <paths>` (AI calls, no changes),
+    review plan.json, then `apply plan.json` (no AI calls; refuses files that
+    changed since the plan was made).
+  - Never prompts. stdout carries only the result document; diagnostics and
+    progress go to stderr. `--output ndjson` streams progress events on stdout
+    (one JSON object per line, the last line is the result document).
+  - Errors: {"schema_version":4,"error":{"code","message","hint","retryable"}}
+    with stable codes; per-file errors use the same shape in `files[].error`
+    (plans: `items[].error`).
+  - JSON Schemas of every document: `autorename-pdf schema`.
+
+NETWORK:
+  `rename` and `gui` send extracted text (and page images when vision runs)
+  to the configured AI provider. With --offline (or `privacy: offline`) only a
+  local or LAN Ollama server is allowed; anything else is an error (exit 3);
+  proxy variables are ignored and redirects never followed. `models fetch`,
+  `setup --ocr-models` (and the GUI's download button) fetch OCR models;
+  `setup` also asks a local Ollama which models it has. No other command uses
+  the network.
+
+FILES:
+  `autorename-pdf config path` prints every location: config.yaml (+ .env
+  beside it), the name-lists folder, the undo journal, OCR models.
+
+EXIT CODES:
+  0   success
+  1   error (or every file failed for mixed reasons)
+  2   usage error (bad arguments, unreadable plan file)
+  3   config error (missing or invalid config, offline-mode violation)
+  4   no PDF files found
+  5   partial failure: some files failed
+  10  provider error: every file failed at the AI provider
+  11  auth error: every file failed authentication (check ai.api_key)

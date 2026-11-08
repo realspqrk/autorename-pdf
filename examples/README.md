@@ -1,25 +1,27 @@
 # Example configs
 
-Complete AutoRename-PDF v2 files from the GitHub repo (not shipped in the Windows ZIP). Copy one over `config.yaml` (next to the EXE or CLI), then set `ai.api_key` and `company.name`.
+Small 4.x recipes: each file lists only what differs from the defaults. The full, commented reference is [`config.yaml.example`](../config.yaml.example).
 
-The [root `config.yaml.example`](../config.yaml.example) is the invoice-first copy-me file (`profile: business`, AP/AR). Do not invent keys; comments there are the schema.
+Copy one to your config location (`autorename-pdf config path` prints it), then set your API key (or `${VAR}` in a `.env` beside the config) and `company.name`.
 
 | File | Use when | Example filename |
 |------|----------|------------------|
 | [`academic.yaml`](academic.yaml) | Papers, preprints, theses | `20260101 Smith Nature Attention Is All You Need.pdf` |
 | [`er-ar.yaml`](er-ar.yaml) | German ER/AR (Eingangsrechnung / Ausgangsrechnung) | `20260906 ACME ER 12,13.pdf` |
-| [`ollama-offline.yaml`](ollama-offline.yaml) | Local LLM + PaddleOCR, no API key | `20260906 ACME AP 12,13.pdf` |
-| [`vision-cloud.yaml`](vision-cloud.yaml) | Scans via LLM vision, no PaddleOCR | `20260906 ACME AP 12,13.pdf` |
-| [`invoice-id.yaml`](invoice-id.yaml) | Keep amount and add the printed invoice number | `20260906 ACME AP 12,13 12345.pdf` |
+| [`invoice-id.yaml`](invoice-id.yaml) | Keep the total and add the printed invoice number | `20260906 ACME AP 12,13 12345.pdf` |
+| [`ollama-offline.yaml`](ollama-offline.yaml) | Fully local: Ollama + built-in OCR, no cloud requests | `20260906 ACME AP 12,13.pdf` |
+| [`vision-cloud.yaml`](vision-cloud.yaml) | Scans read by a cloud vision model, no local OCR | `20260906 ACME AP 12,13.pdf` |
 
-One-run override without copying a file:
-
-```powershell
-.\autorename-pdf-cli.exe rename --profile academic paper.pdf
-```
-
-Validate before renaming (from a git clone):
+One run with another profile, without copying a file:
 
 ```bash
-python autorename-pdf.py config validate --config examples/academic.yaml --output json
+autorename-pdf rename --profile academic paper.pdf
 ```
+
+Validate a recipe before using it:
+
+```bash
+autorename-pdf --config examples/academic.yaml config validate
+```
+
+`cargo test -p autorename-app --test examples` validates every file here in CI.

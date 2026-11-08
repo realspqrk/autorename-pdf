@@ -1,0 +1,26 @@
+# AutoRename-PDF name list for company_name (Name matching). Maps a canonical
+# name to its variants. Copy to name-lists/company_name.yaml beside your
+# config.yaml (`autorename-pdf config path` prints the folder).
+#   aliases: hand-written variants (never changed by the app)
+#   learned: variants added automatically (harmonization.auto_learn)
+#   source:  user | auto      review: true = auto entry worth a human look
+# Matching ignores case, punctuation and legal forms (GmbH, Inc, Ltd, ...), so
+# "Microsoft Corp." already matches "Microsoft" without an alias.
+# The app rewrites this file when it learns names; comments are not kept.
+# Maintain it from the CLI: autorename-pdf names list|review|merge|rename|add
+
+"Alphabet":
+  aliases: ["Google", "Google Cloud", "Google Ireland"]
+  source: user
+
+"Microsoft":
+  aliases: ["MSFT", "Microsoft Ireland Operations"]
+  source: user
+
+"Amazon":
+  aliases: ["Amazon.com", "AWS", "Amazon Web Services"]
+  source: user
+
+"Apple":
+  aliases: ["Apple Computer", "Apple Distribution International"]
+  source: user

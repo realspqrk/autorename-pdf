@@ -1,40 +1,19 @@
 # German invoice codes: ER = Eingangsrechnung, AR = Ausgangsrechnung.
-# Copy to config.yaml. Set ai.api_key and company.name.
 # Filename: 20260906 ACME ER 12,13.pdf
-# These are common German bookkeeping abbreviations, not a DATEV filename standard.
-# Project default remains AP/AR (Accounts Payable / Accounts Receivable).
+# Common German bookkeeping abbreviations, not a DATEV filename standard.
+# Every key not listed here uses its default (see config.yaml.example).
+config_version: 4
 
 ai:
-  provider: "openai"
-  model: "gpt-5.6-luna"
-  api_key: "your-api-key-here"
-  base_url: ""
-  temperature: 0.0
-  max_retries: 2
+  provider: openai
+  api_key: "${OPENAI_API_KEY}"
 
 pdf:
-  max_pages: 3
-  ocr: false
-  vision: false
-  text_quality_threshold: 0.3
-  incoming_invoice: "ER"          # default is AP (Accounts Payable)
-  outgoing_invoice: "AR"          # same token as default; here = Ausgangsrechnung
-
-paddleocr:
-  venv_path: ""
-  language: "de"                 # default en; latin OCR still includes English
-  device: "auto"
-  detection_model: ""
-  det_limit_side_len: 736
-  cpu_threads: 4
+  incoming_invoice: ER          # default AP (Accounts Payable)
+  outgoing_invoice: AR          # same token as the default; here Ausgangsrechnung
 
 company:
-  name: "Your Company Name"
+  name: "Meine Firma GmbH"      # your company, so ER and AR can be told apart
 
 output:
-  language: "German"            # default English — non-invoice document_type labels
-  date_format: "%Y%m%d"
-
-profile: business
-profiles: {}
-prompt_extension: ""
+  language: German              # non-invoice types: Brief, Vertrag, ...

@@ -1,0 +1,64 @@
+[package]
+name = "autorename-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "autorename-pdf"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+autorename-core = { version = "4.0.0", path = "../core" }
+chrono = "0.4.45"
+clap = { version = "4.6.7", features = ["derive"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "accesskit", "persistence", "wayland", "x11"], optional = true }
+egui = { version = "0.37", optional = true }
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal", "wayland"], optional = true }
+schemars = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.1.1"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
+
+[features]
+default = ["ocr", "gui"]
+# Offline OCR engine (oar-ocr + static ONNX Runtime, ~28 MB). Off for targets
+# without prebuilt ORT (x86_64-apple-darwin).
+ocr = ["autorename-core/ocr"]
+# egui/eframe desktop GUI (`autorename-pdf gui`, no-args + display).
+gui = [
+    "dep:eframe",
+    "dep:egui",
+    "dep:rfd",
+    "dep:wayland-client",
+    "dep:wayland-backend",
+    "dep:raw-window-handle",
+    "dep:rustix",
+    "dep:percent-encoding",
+]
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+egui_kittest = { version = "0.37", features = ["wgpu", "snapshot", "eframe"] }
+insta = "1.49.0"
+predicates = "3.1.4"
+tempfile = "3.27.0"
+
+# Native Wayland file drops (`gui/wayland_dnd.rs`; winit 0.30 has none).
+[target.'cfg(target_os = "linux")'.dependencies]
+percent-encoding = { version = "2.3.2", optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
+rustix = { version = "1.1.6", features = ["event", "pipe"], optional = true }
+wayland-backend = { version = "0.3.17", features = ["client_system"], optional = true }
+wayland-client = { version = "0.31.15", optional = true }
+
+[target."cfg(windows)".dependencies]
+winreg = "0.56.0"
+
+[build-dependencies]
+embed-resource = "3.0.12"

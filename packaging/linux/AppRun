@@ -1,0 +1,8 @@
+#!/bin/sh
+# AutoRename-PDF AppRun (replaces cargo-packager's desktop-file AppRun, which
+# prepends the .desktop `Exec` arguments, `gui`, to every invocation).
+# Arguments pass through unchanged: no arguments + a display opens the GUI,
+# a subcommand runs the CLI. The .desktop entry carries `gui %F` itself.
+HERE="$(dirname "$(readlink -f "$0")")"
+export APPDIR="${APPDIR:-$HERE}"
+exec "$HERE/usr/bin/autorename-pdf" "$@"

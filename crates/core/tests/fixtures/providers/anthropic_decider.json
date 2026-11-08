@@ -1,0 +1,1 @@
+{"id":"msg_01D","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"{\"choice\":\"1\"}"}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":6}}

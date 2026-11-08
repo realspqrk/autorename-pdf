@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+GenericName=PDF Renamer
+Comment={{comment}}
+Exec={{exec}} gui %F
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+MimeType=application/pdf;inode/directory;
+Keywords=PDF;rename;invoice;OCR;
+StartupNotify=true
+StartupWMClass=autorename-pdf
+Actions=rename-now;preview;
+
+[Desktop Action rename-now]
+Name=Rename now
+Exec={{exec}} gui --rename-now %F
+
+[Desktop Action preview]
+Name=Preview in AutoRename-PDF
+Exec={{exec}} gui %F

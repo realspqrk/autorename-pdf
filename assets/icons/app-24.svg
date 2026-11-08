@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 24 px small master (spec §6): flat tile r5, 1 px #991B1B edge, 2 px
+     page on whole-pixel coordinates, two text lines. -->
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0.5" y="0.5" width="23" height="23" rx="4.5" fill="#DC2626" stroke="#991B1B" stroke-width="1"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt">
+    <path d="M7 5H13L17 9V19H7Z"/>
+    <path d="M9 12H15M9 15H15"/>
+  </g>
+</svg>

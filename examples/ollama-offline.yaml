@@ -1,40 +1,26 @@
-# Fully local: Ollama LLM + PaddleOCR. No API key, no cloud after models are pulled.
-# Copy to config.yaml. Install Ollama, run: ollama pull qwen3:4b
-# Install PaddleOCR via setup.ps1. Keep Ollama running locally.
-# Filename still uses the business shape: 20260906 ACME AP 12,13.pdf
-# Scanned/image PDFs: use a vision model (qwen3-vl:8b) and set vision: true.
+# Fully local: Ollama LLM + built-in OCR. No API key; no cloud request is
+# allowed (anything non-local is an error, exit 3).
+# Filename: 20260906 ACME AP 12,13.pdf (business profile)
+#
+# Easiest: `autorename-pdf setup --offline --ollama-model <model> --company <you>`
+# writes the same settings. Before going offline:
+#   ollama pull gemma4               # vision-capable; CPU-only hosts: gemma4:e2b
+#                                    # (then also set ai.model: gemma4:e2b below)
+#   autorename-pdf models fetch      # OCR models (~40 MB); offline blocks downloads.
+#                                    # Air-gapped: `autorename-pdf models import <copied models dir>`
+# Every key not listed here uses its default (see config.yaml.example).
+config_version: 4
+
+privacy: offline
 
 ai:
-  provider: "ollama"              # default openai — local, no cloud
-  model: "qwen3:4b"               # pull first: ollama pull qwen3:4b
-  api_key: ""                     # must be empty for ollama
-  base_url: ""
-  temperature: 0.0
-  max_retries: 2
+  provider: ollama
+  model: gemma4
+  base_url: http://localhost:11434   # localhost or a LAN address only
 
 pdf:
-  max_pages: 3
-  ocr: true                       # default false — PaddleOCR via setup.ps1
-  vision: false
-  text_quality_threshold: 0.3
-  incoming_invoice: "AP"
-  outgoing_invoice: "AR"
+  ocr: auto                     # scans: local OCR first
+  vision: auto                  # still poor: page images to the local model
 
-paddleocr:
-  venv_path: ""
-  language: "en"
-  device: "auto"
-  detection_model: ""
-  det_limit_side_len: 736
-  cpu_threads: 4
-
-company:
-  name: "Your Company Name"
-
-output:
-  language: "English"
-  date_format: "%Y%m%d"
-
-profile: business
-profiles: {}
-prompt_extension: ""
+harmonization:
+  decider: ai                   # ambiguous company names: asks the local model

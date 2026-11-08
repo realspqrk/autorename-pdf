@@ -1,0 +1,52 @@
+# AutoRename-PDF 4 configuration (written by `autorename-pdf config init`).
+# Every key is optional; omitted keys use the defaults shown here.
+# `${VAR}` reads the environment first, then a .env file beside this file.
+# Check it with `autorename-pdf config validate`; see `autorename-pdf --help`.
+config_version: 4
+
+# cloud: use the provider below. offline: local/LAN Ollama only, no cloud requests.
+privacy: cloud
+
+ai:
+  provider: openai              # openai | anthropic | gemini | xai | ollama
+  model: null                   # null = provider default (openai: gpt-6-luna)
+  api_key: "${OPENAI_API_KEY}"  # put OPENAI_API_KEY=... into .env beside this file
+  base_url: ""                  # empty = provider default (Ollama: http://localhost:11434)
+  temperature: 0.0
+  max_retries: 2
+
+pdf:
+  max_pages: 3                  # pages sent to the AI
+  # Free first: text layer → local OCR → page images to the model.
+  ocr: auto                     # true | false | auto; auto = pages scoring below the threshold. Needs
+                                # `autorename-pdf models fetch` (auto without models: warning, then vision)
+  vision: auto                  # true | false | auto; auto = only pages still below it after OCR.
+                                # Offline: images go to the local Ollama model, never to the cloud
+  text_quality_threshold: 0.8   # per-page score (0..1; 1 = clean text, no pictures; pages with
+                                # pictures score at most 0.75, so 0.8 reads them with OCR)
+  incoming_invoice: AP          # document_type for invoices you receive
+  outgoing_invoice: AR          # document_type for invoices you send
+
+ocr:
+  language: auto                # auto = installed model packs (latin: English, German, ...)
+  threads: 4
+
+company:
+  name: ""                      # YOUR company, so incoming and outgoing invoices can be told apart
+
+output:
+  language: English             # language of document types such as Letter or Contract
+  date_format: "%Y%m%d"
+  amount_format: "{currency} {amount}"  # invoice amount in names, e.g. "{amount} {currency}"
+
+enrich:
+  enabled: true                 # embed metadata + a JSON attachment into renamed PDFs (undoable)
+
+harmonization:
+  auto_learn: true              # learn name variants into name-lists/<field>.yaml (company_name.yaml)
+  decider: ai                   # ai | openai-decisions | jev | off (for ambiguous matches)
+  decider_api_key: ""           # openai-decisions/jev only; e.g. "${JEV_API_KEY}" (empty = fallback)
+
+prompt_extension: ""            # extra instructions appended to the AI prompt
+profile: business               # business | academic | a custom profile under `profiles`
+profiles: {}

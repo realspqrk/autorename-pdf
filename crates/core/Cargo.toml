@@ -1,0 +1,49 @@
+[package]
+name = "autorename-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "autorename_core"
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.23.1"
+caseless = "0.2.2"
+chrono = "0.4.45"
+dirs = "7.0.0"
+dotenvy = "0.15.7"
+image = { version = "0.25", default-features = false, features = ["png"] }
+indexmap = { version = "2.14.2", features = ["serde"] }
+lopdf = { version = "0.47.0", default-features = false }
+md-5 = "0.11.0"
+oar-ocr = { version = "=0.10.2", optional = true }
+pdfium-render = { version = "=0.9.5", default-features = false, features = ["pdfium_8125", "image_latest", "thread_safe"] }
+quick-xml = "0.42.0"
+rapidfuzz = "0.5.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"] }
+schemars = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.1.1"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+unicode-normalization = "0.1.26"
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.6", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[features]
+# Offline OCR engine (oar-ocr + statically linked ONNX Runtime). Model management
+# (manifest/fetch/list) is always available; only inference needs this.
+ocr = ["dep:oar-ocr"]
+

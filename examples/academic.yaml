@@ -1,40 +1,15 @@
 # Academic papers, preprints, theses.
-# Copy to config.yaml. Set ai.api_key (unless ollama).
 # Filename: 20260101 Smith Nature Attention Is All You Need.pdf
-# Empty journal/venue is omitted. Year-only dates become 01.01 of that year.
-# Company aliases are not applied. One-run alternative: rename --profile academic
+#   date · first author · venue (omitted when empty) · title
+# Year-only dates become 01.01 of that year. No name matching by default; to
+# unify venue spellings add `profiles: {academic: {harmonize_field: journal_name}}`
+# (learned into name-lists/journal_name.yaml beside the config).
+# One-run alternative without this file: autorename-pdf rename --profile academic paper.pdf
+# Every key not listed here uses its default (see config.yaml.example).
+config_version: 4
 
 ai:
-  provider: "openai"
-  model: "gpt-5.6-luna"
-  api_key: "your-api-key-here"
-  base_url: ""
-  temperature: 0.0
-  max_retries: 2
+  provider: openai
+  api_key: "${OPENAI_API_KEY}"
 
-pdf:
-  max_pages: 3
-  ocr: false
-  vision: false
-  text_quality_threshold: 0.3
-  incoming_invoice: "AP"
-  outgoing_invoice: "AR"
-
-paddleocr:
-  venv_path: ""
-  language: "en"
-  device: "auto"
-  detection_model: ""
-  det_limit_side_len: 736
-  cpu_threads: 4
-
-company:
-  name: "Your Company Name"
-
-output:
-  language: "English"
-  date_format: "%Y%m%d"
-
-profile: academic              # only delta vs config.yaml.example; or: rename --profile academic
-profiles: {}
-prompt_extension: ""
+profile: academic

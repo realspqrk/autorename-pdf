@@ -1,0 +1,121 @@
+---
+source: crates/app/tests/cli.rs
+expression: "help(&[\"rename\", \"--help\"])"
+---
+Extract fields from each PDF with AI, then rename it (and enrich and learn).
+
+Per file: text layer -> offline OCR (--ocr) -> page images (--vision) -> one
+structured AI call -> name matching -> filename from the profile
+template -> `_(n)` suffix on collisions. Existing files are never overwritten.
+
+SIDE EFFECTS (unless --dry-run or --plan):
+  - Renames each file in its folder.
+  - Enrichment: appends metadata (Title/Subject/Keywords, XMP) and an
+    `autorename-pdf.json` attachment as an incremental update; the original
+    bytes stay intact. Skipped for signed, certified, encrypted, PDF/A and
+    e-invoice files. Off with --no-enrich.
+  - Learning: adds new name variants (e.g. companies) to the profile's name
+    list, name-lists/<field>.yaml. Off with --no-learn.
+  - Records everything as one batch in the undo journal (`undo` reverts it).
+
+With --dry-run or --plan FILE nothing changes: the plan is printed (and
+written to FILE); `apply FILE` executes it later without new AI calls.
+
+NETWORK:
+  One AI request per file, plus a small one per ambiguous name
+  (harmonization.decider: ai). Local Ollama only with --offline.
+
+OUTPUT:
+  text: `old.pdf -> new.pdf` per file and a summary.
+  json: the result (`schema result`); with --dry-run/--plan the plan
+  (`schema plan`). Each file has rename_status, enrich_status, learn_status.
+
+Usage: autorename-pdf rename [OPTIONS] <PATH>...
+
+Arguments:
+  <PATH>...
+          PDF files and/or folders
+
+Options:
+      --dry-run
+          Show the plan; change nothing
+
+      --plan <FILE>
+          Write the plan to FILE for `apply`; change nothing
+
+      --force
+          Overwrite an existing --plan FILE (never an input PDF)
+
+  -r, --recursive
+          Include subfolders of folder arguments
+
+      --profile <ID>
+          Naming profile for this run (business, academic, or a custom id)
+
+      --provider <NAME>
+          AI provider for this run
+          
+          [possible values: openai, anthropic, gemini, xai, ollama]
+
+      --model <ID>
+          Model id for this run [default: per-provider default from the config]
+
+      --ocr[=<WHEN>]
+          Offline OCR (`--ocr` = on; default auto = poor text layer); needs `models fetch`
+
+          Possible values:
+          - auto: Only pages scoring below pdf.text_quality_threshold
+          - on
+          - off
+
+      --vision[=<WHEN>]
+          Page images to the model (`--vision` = on; default auto = text + OCR still poor)
+
+          Possible values:
+          - auto: Only pages scoring below pdf.text_quality_threshold
+          - on
+          - off
+
+      --no-enrich
+          Do not embed metadata into the PDFs
+
+      --no-learn
+          Do not add new names to the name list (name-lists/<field>.yaml)
+
+  -j, --jobs <N>
+          Files processed in parallel [default: min(4, CPU cores)]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Global options:
+      --config <FILE>
+          Config file [default: $AUTORENAME_PDF_CONFIG, else the OS config dir]
+
+  -o, --output <FORMAT>
+          Output format [default: text on a terminal, json otherwise]
+
+          Possible values:
+          - text:   Human-readable, aligned, colored on a terminal
+          - json:   One JSON document on stdout
+          - ndjson: Progress events, one JSON object per line; the last line is the result
+
+  -q, --quiet
+          No progress or notices on stderr (errors are still reported)
+
+  -v, --verbose
+          More detail on stderr
+
+      --offline
+          Privacy mode: local/LAN Ollama only, any cloud request is an error
+
+      --no-color
+          Disable colors (also: NO_COLOR, or output that is not a terminal)
+
+EXAMPLES:
+  autorename-pdf rename invoice.pdf
+  autorename-pdf rename --dry-run -r ~/Documents/Inbox
+  autorename-pdf rename ~/Scans --ocr=auto --vision=auto
+  autorename-pdf rename *.pdf --provider anthropic --model claude-haiku-5-5
+  autorename-pdf rename ~/Scans --plan plan.json -o json   # then: apply plan.json
+  autorename-pdf --offline rename ~/Private                # local Ollama only

@@ -1,0 +1,21 @@
+# AutoRename-PDF
+
+> Rename PDFs from their content (AI + local OCR): `Rechnung (2).pdf` → `20251028 Telekom Deutschland AP 54,99.pdf`. One binary `autorename-pdf` (GUI + CLI) for Windows, Linux, macOS. Every change is undoable.
+
+## Set up for a user
+- [Setup runbook](AGENTS.md#setup-runbook): install, `autorename-pdf setup --check`, `setup ...`, verify with the demo
+- `autorename-pdf setup --help`: flags, steps, exit codes
+
+## Use
+- [Demo with expected outputs](examples/demo/README.md)
+- [README](README.md): quick start, offline mode, metadata, company names
+- `autorename-pdf --help` and `<command> --help`: every option, side effect, exit code
+- `autorename-pdf schema`: JSON Schemas of plan, result, error, event, inspect, config
+- [Config reference](config.yaml.example) and [recipes](examples/)
+
+## Machine contract
+- `--output json` (default when stdout is not a TTY); errors `{"schema_version":4,"error":{"code","message","hint","retryable"}}`
+- Exit codes: 0 ok, 1 error, 2 usage, 3 config, 4 no files, 5 partial, 10 provider, 11 auth
+- Two-step: `rename --plan plan.json <paths>` (AI, no changes) → edit `items[].proposed_name` if needed → `apply plan.json` (no AI) → `undo`
+- `AUTORENAME_PDF_DATA_DIR` isolates journal and OCR models; Windows JSON escapes non-ASCII as `\uXXXX`
+- Offline: `setup --offline --ollama-model <m>` (back to cloud: `setup --cloud --provider <p>`); proxies ignored, redirects never followed, only loopback/LAN

@@ -1,0 +1,14 @@
+Page 1:
+INVOICE
+Invoice No: OUT-2025-0007
+Date: 10.03.2025
+From: Petermeir Digital Solutions e.U.
+Hauptplatz 1, 8530 Bad Gleichenberg
+UID: ATU00000000
+To: Wayne Enterprises Inc.
+1007 Mountain Drive, Gotham City
+Website Redesign EUR 8,500.00
+SEO Optimization Package EUR 2,200.00
+-----------
+Total EUR 10,700.00
+Due: 10.04.2025

@@ -1,39 +1,15 @@
-# Cloud vision, no PaddleOCR. The LLM reads page images (needs a vision-capable model).
-# Copy to config.yaml. Set ai.api_key. Best on machines that cannot install the OCR venv.
+# Scans read by a cloud vision model, without local OCR.
 # Filename: 20260906 ACME AP 12,13.pdf
-# pdfplumber still runs; vision adds page images on top.
+# The text layer is still read first; page images are sent whenever vision
+# is `true` (set `auto` to send them only for poor text layers).
+# Every key not listed here uses its default (see config.yaml.example).
+config_version: 4
 
 ai:
-  provider: "gemini"              # vision-capable (openai / anthropic / xai also work)
-  model: "gemini-3.8-flash"     # must accept images; default is gpt-5.6-luna
-  api_key: "your-api-key-here"
-  base_url: ""
-  temperature: 0.0
-  max_retries: 2
+  provider: gemini              # vision-capable; openai, anthropic and xai work too
+  model: gemini-3.8-flash       # must accept images
+  api_key: "${GEMINI_API_KEY}"
 
 pdf:
-  max_pages: 3
-  ocr: false                      # leave off — this recipe is cloud vision only
-  vision: true                    # default false — send page images to the LLM
-  text_quality_threshold: 0.3
-  incoming_invoice: "AP"
-  outgoing_invoice: "AR"
-
-paddleocr:
-  venv_path: ""
-  language: "en"
-  device: "auto"
-  detection_model: ""
-  det_limit_side_len: 736
-  cpu_threads: 4
-
-company:
-  name: "Your Company Name"
-
-output:
-  language: "English"
-  date_format: "%Y%m%d"
-
-profile: business
-profiles: {}
-prompt_extension: ""
+  ocr: false                    # no local OCR models needed
+  vision: true                  # always send page images

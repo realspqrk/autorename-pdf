@@ -1,0 +1,1 @@
+{"error":{"message":"Rate limit reached for gpt-6-luna on requests per min (RPM): Limit 500, Used 500, Requested 1.","type":"requests","param":null,"code":"rate_limit_exceeded"}}
