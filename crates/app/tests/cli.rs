@@ -83,8 +83,10 @@ fn q(p: &Path) -> String {
         .all(|c| c.is_ascii_alphanumeric() || "-_./:=,@+%".contains(c));
     if safe {
         s
-    } else {
+    } else if cfg!(windows) {
         format!("'{}'", s.replace('\'', "''"))
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
     }
 }
 

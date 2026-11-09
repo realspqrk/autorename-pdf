@@ -346,30 +346,31 @@ mod imp {
         MOVE_FILE_FLAGS, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
     };
 
-    /// NUL-terminated UTF-16 path for Win32. Paths near `MAX_PATH` (260)
-    /// get the verbatim `\\?\` prefix, as std adds for its own calls; a deep
-    /// folder plus a long generated name would otherwise fail to rename.
+    /// NUL-terminated UTF-16 path for Win32, resolved like Win32 would
+    /// (`absolute` = GetFullPathNameW: cwd, drive-relative, `/`, `..`).
+    /// Results near `MAX_PATH` (260) get the verbatim prefix, as std adds
+    /// for its own calls; a deep folder plus a long generated name would
+    /// otherwise fail to rename. Verbatim inputs (`\\?\`) pass unchanged.
     fn wide(p: &Path) -> io::Result<Vec<u16>> {
-        const SLASH: u16 = b'\\' as u16;
-        let mut w: Vec<u16> = p.as_os_str().encode_wide().collect();
-        let prefixed = w.len() >= 4
-            && w[0] == SLASH
-            && w[1] == SLASH
-            && (w[2] == u16::from(b'?') || w[2] == u16::from(b'.'))
-            && w[3] == SLASH;
-        if w.len() >= 248 && !prefixed {
-            // `absolute` (GetFullPathNameW) normalizes `/` and `..`, which
-            // verbatim paths would take literally.
+        let utf16 = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let raw: Vec<u16> = p.as_os_str().encode_wide().collect();
+        let mut w = if raw.starts_with(&utf16(r"\\?\")) {
+            raw
+        } else {
             let a: Vec<u16> = std::path::absolute(p)?.as_os_str().encode_wide().collect();
-            w = if a.starts_with(&[SLASH, SLASH]) {
-                r"\\?\UNC\"
-                    .encode_utf16()
-                    .chain(a[2..].iter().copied())
-                    .collect()
+            // std's threshold (directory APIs), counting the terminating NUL.
+            if a.len() + 1 < 248 || a.starts_with(&utf16(r"\\?\")) || a.starts_with(&utf16(r"\??\"))
+            {
+                a
+            } else if a.starts_with(&utf16(r"\\.\")) {
+                // Device namespace (`\\.\C:\…`): same path, verbatim form.
+                [utf16(r"\\?\"), a[4..].to_vec()].concat()
+            } else if a.starts_with(&utf16(r"\\")) {
+                [utf16(r"\\?\UNC\"), a[2..].to_vec()].concat()
             } else {
-                r"\\?\".encode_utf16().chain(a).collect()
-            };
-        }
+                [utf16(r"\\?\"), a].concat()
+            }
+        };
         w.push(0);
         Ok(w)
     }
@@ -769,6 +770,7 @@ mod tests {
         let f = File::open(&p).unwrap();
         let id = file_id(&f).unwrap();
         assert_eq!(path_id(&p).unwrap(), id);
+        #[cfg(windows)]
         drop(f); // Windows refuses to replace a file that is still open
         write_atomic(&p, b"1").unwrap();
         assert_ne!(path_id(&p).unwrap(), id);
