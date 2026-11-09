@@ -23,7 +23,7 @@ use egui::{Align2, Color32, Id, Pos2, Rect, Response, Sense, StrokeKind, Ui, Wid
 
 use super::theme::{self, Palette, Type, space, stroke};
 
-pub use badge::{Badge, chip};
+pub use badge::Badge;
 pub use banner::Banner;
 pub use button::{BSize, Button, Variant};
 pub use field::Field;

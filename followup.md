@@ -17,9 +17,7 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 Queued by the owner on 2026-11-08, in this order.
 
-- **F2 Simple main view** (redesigned 2026-11-09, in progress on `feat/simple-view`): details panel = expert view, hidden by default, toggle in the list toolbar; header without profile combo/provider chip (settings only in Settings); minimal filter; plain rows. Spec: gui-design §3, §4.1, §4.3, §4.6.
 - **F3 GUI fine-tune**: spacing/alignment pass over every screen; the drop zone grows with window height but not width and looks unbalanced (`gui/screens/empty.rs`, `components/drop_zone.rs`).
-- **F5 About + third-party notices**: GitHub moved from `ptmrio` to `realspqrk` (`.github/FUNDING.yml`, README support links, `SUPPORT_LINKS` in `gui/screens/settings.rs`). Generate notices programmatically (cargo-about template + `assets/licenses/` for PDFium, ONNX Runtime, PaddleOCR models, Inter/JetBrains Mono, Lucide) into `THIRD_PARTY_NOTICES.md`, ship it in packages, show it in About, `--check` in CI, cargo-deny license allowlist. Reference: electron-workspace `packages/shared/bin/generate-thirdparty.js` + `assets/licenses/`.
 - **F4 Release prep**: audit open aspects; final Linux build (AppImage/deb/pacman) + binary; Windows build and Azure Artifact Signing in the VM (`cargo xtask sign` mirrors electron-workspace: signtool `/dlib Azure.CodeSigning.Dlib.dll /dmdf metadata.json`, timestamp `http://timestamp.acs.microsoft.com`; VM needs Windows SDK signtool, Artifact Signing Client Tools, `metadata.json`, an Azure login); macOS build + notarization on a separate Mac (written guidance).
 
 ## Validation gaps

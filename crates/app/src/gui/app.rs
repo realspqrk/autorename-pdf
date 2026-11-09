@@ -81,7 +81,7 @@ impl App {
         }
         if let Some(st) = cc.storage {
             app.m.detail_w = eframe::get_value(st, STORE_DETAIL_W).unwrap_or(None);
-            app.m.detail_visible = eframe::get_value(st, STORE_DETAIL_VISIBLE).unwrap_or(true);
+            app.m.detail_visible = eframe::get_value(st, STORE_DETAIL_VISIBLE).unwrap_or(false);
             app.m.prefs = eframe::get_value(st, STORE_PREFS).unwrap_or_default();
         }
         app.os_reduce_motion = super::motion::os_reduce_motion();
@@ -173,7 +173,7 @@ impl App {
     /// Follow the active profile's name list (a profile switch, a saved
     /// config): a new list is loaded on the worker; a profile without
     /// harmonize_field has no list and no tab. Demo data never touches disk.
-    fn sync_name_list(&mut self) {
+    pub(crate) fn sync_name_list(&mut self) {
         if self.m.name_label().is_none() && self.m.tab == Tab::Companies {
             self.m.tab = Tab::Rename;
         }
@@ -285,6 +285,13 @@ impl App {
         self.load_tab();
         self.poll(&ctx);
         self.sync_stale_banner();
+        // The filter shows only while something needs a look (§4.3).
+        if self.m.counts().needs_look() == 0 {
+            self.m.filter = super::model::Filter::All;
+        }
+        // The active row (row shortcuts, details, Tab stop) is always a
+        // visible one.
+        self.m.sync_active();
         self.input(&ctx, &mut acts);
 
         let full = ui.max_rect();
@@ -316,8 +323,12 @@ impl App {
             self.drop_overlay(ui, full, st);
         }
         self.toasts(ui, full);
-        if self.m.license_open {
-            screens::settings::license_dialog(&ctx, &mut self.m.license_open);
+        if let Some(doc) = self.m.doc_open {
+            let mut open = true;
+            screens::settings::doc_dialog(&ctx, doc, &mut open);
+            if !open {
+                self.m.doc_open = None;
+            }
         }
         if self.m.confirm_stop {
             let r = Dialog {
@@ -352,7 +363,7 @@ impl App {
         if !done {
             let tr = Rect::from_min_size(body.min, theme::v2(body.width(), size::TOOLBAR));
             let list_w = body.width() - self.detail_w(ui, body.width());
-            preview::toolbar(ui, tr, list_w, &mut self.m, acts);
+            preview::toolbar(ui, tr, list_w, &self.m, acts);
             top = tr.bottom();
         }
         // Banners (max 2, newest first) under the toolbar, inset 16.
@@ -689,12 +700,8 @@ impl App {
         if take(cmd, Key::Comma) {
             acts.push(Action::SwitchTab(Tab::Settings));
         }
-        if take(cmd, Key::Backslash) {
-            self.m.detail_visible = !self.m.detail_visible;
-        }
-        if take(cmd, Key::F) {
-            self.m.tab = Tab::Rename;
-            ctx.memory_mut(|m| m.request_focus(egui::Id::unique("search")));
+        if take(cmd, Key::Backslash) && self.m.details_toggle_shown() {
+            acts.push(Action::ToggleDetails);
         }
         if take(cmd, Key::Enter) {
             // Ctrl+Enter = the visible primary of the current tab, honoring
@@ -726,7 +733,7 @@ impl App {
             && !self.text_focus_prev
             && !egui::Popup::is_any_open(ctx)
             && !self.m.confirm_stop
-            && !self.m.license_open
+            && self.m.doc_open.is_none()
             && self.m.companies.merge.is_none()
             && take(Modifiers::NONE, Key::Escape)
         {
@@ -800,7 +807,7 @@ impl App {
                 self.refocus_frames = 2;
             }
         }
-        if let Some(a) = self.m.active {
+        if let Some(a) = self.m.active.filter(|a| visible.contains(a)) {
             if take(Modifiers::NONE, Key::Space) {
                 acts.push(Action::Toggle(a));
             }
@@ -1014,30 +1021,6 @@ impl App {
 
     /// Profile change: the shown plan's results become stale (fingerprint)
     /// and are re-analyzed with the new profile.
-    fn select_profile(&mut self, ctx: &egui::Context, id: &str) {
-        if self.m.busy() {
-            return;
-        }
-        self.m.config.select_profile(id);
-        // The name list (and the tab label/count) follow the profile at
-        // once, whichever tab is open.
-        self.sync_name_list();
-        if self.m.rows.is_empty() || self.m.report.is_some() {
-            return;
-        }
-        let n = self.schedule(&[], &[]);
-        if n > 0 {
-            let label = super::screens::header::profile_label(id);
-            self.toast(
-                ctx,
-                format!(
-                    "Analyzing {} again with the {label} profile",
-                    c::plural(n, "file", "files")
-                ),
-            );
-        }
-    }
-
     pub(crate) fn act(&mut self, ctx: &egui::Context, a: Action) {
         self.act_inner(ctx, a);
         self.sync_stale_banner();
@@ -1087,7 +1070,7 @@ impl App {
                 }
             }
             Action::OpenPath(p) => open_path(&p),
-            Action::ShowLicense => self.m.license_open = true,
+            Action::ShowDoc(d) => self.m.doc_open = Some(d),
             Action::OpenUrl(url) => open_path(Path::new(&url)),
             Action::ToggleSettings => {
                 if self.m.tab == Tab::Settings {
@@ -1116,11 +1099,6 @@ impl App {
                     );
                 }
             }
-            Action::OpenSettings(page) => {
-                self.act_inner(ctx, Action::SwitchTab(Tab::Settings));
-                self.m.settings.section = page.min(super::pages::page::ABOUT);
-                self.m.settings.scroll_top = true;
-            }
             Action::SwitchTab(Tab::Companies) if self.m.name_label().is_none() => {}
             Action::SwitchTab(t) => {
                 if t == Tab::Settings && self.m.tab != Tab::Settings {
@@ -1137,8 +1115,11 @@ impl App {
                 }
             }
             Action::SaveSetup => self.save_setup(),
-            Action::SelectProfile(id) => self.select_profile(ctx, &id),
-            Action::SetFilter(f) => self.m.filter = f,
+            Action::SetFilter(f) => {
+                self.m.filter = f;
+                self.m.sync_active();
+            }
+            Action::ToggleDetails => self.m.detail_visible = !self.m.detail_visible,
             Action::Activate(i) => self.m.active = Some(i),
             Action::Toggle(i) => self.m.toggle(i),
             Action::StartEdit(i) => {
@@ -1436,11 +1417,12 @@ impl App {
     /// Settings for "Test connection" in the setup card (nothing saved).
     fn setup_settings(&self) -> Result<config::Settings, String> {
         let s = &self.m.setup;
-        let (id, _, var) = if s.offline {
-            super::model::PROVIDERS[4]
+        let id = if s.offline {
+            super::model::PROVIDERS[4].0
         } else {
-            super::model::PROVIDERS[s.provider.min(3)]
+            super::model::PROVIDERS[s.provider.min(3)].0
         };
+        let var = super::model::key_var(id);
         let key = if !s.api_key.trim().is_empty() {
             s.api_key.trim().to_string()
         } else if var.is_empty() {
@@ -1889,11 +1871,12 @@ impl App {
             ));
             return;
         }
-        let (id, _, var) = if s.offline {
-            super::model::PROVIDERS[4]
+        let id = if s.offline {
+            super::model::PROVIDERS[4].0
         } else {
-            super::model::PROVIDERS[s.provider.min(3)]
+            super::model::PROVIDERS[s.provider.min(3)].0
         };
+        let var = super::model::key_var(id);
         let text: String = crate::cmd::STARTER_CONFIG
             .lines()
             .map(|l| {
@@ -1925,6 +1908,17 @@ impl App {
             })
             .collect::<Vec<_>>()
             .join("\n");
+        // Company (optional) through the comment-preserving editor.
+        let text = if s.company.trim().is_empty() {
+            text
+        } else {
+            autorename_core::config_edit::set(
+                &text,
+                Some("company"),
+                "name",
+                &autorename_core::config_edit::quoted(s.company.trim()),
+            )
+        };
         let env_path = config::env_path(&path);
         let env = if !s.api_key.trim().is_empty() && !var.is_empty() {
             match env_with(&env_path, &[(var, s.api_key.trim().to_string())]) {

@@ -68,6 +68,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - Anthropic spend-cap 429 differs only by the missing `retry-after` (+ `error.details.error_code`); treated as non-retryable quota.
 - `reqwest::Url` (WHATWG) normalizes `http://134744072`, `0x08080808`, `010.010.010.010` and `\\@` tricks to `8.8.8.8`; never hand-parse URLs for the offline guard. Bare `host:port` parses as scheme `host` → rejected.
 - reqwest custom DNS resolvers are not consulted for IP-literal hosts → `guard_offline` checks IP literals up front.
+- One-run overrides (`--provider`, `--offline`) must be applied before `${VAR}` expansion (`config::load_with_overrides`): a new provider brings `${ITS_KEY_VAR}`, default model and endpoint (`apply_overrides`, same rule as `setup --provider`); on an already expanded tree that reference stays literal.
 
 ## Live tests & Ollama
 - The repo `.env` may hold placeholder keys (`sk-your-...`): a 401 in live tests means placeholder, not an adapter bug.
@@ -94,6 +95,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 ## CLI & pipeline
 - `--ocr`/`--vision` use `require_equals`: `--ocr auto` means "OCR on + a path named `auto`". Write `--ocr=auto`.
 - clap without `wrap_help` ignores the terminal width, so help is deterministic. Keep it that way (insta snapshots in `crates/app/tests/snapshots/`); pre-wrap help text at 80 columns. Refresh: `INSTA_UPDATE=always cargo test -p autorename-app --test cli help_snapshots`, delete leftover `.snap.new`.
+- Recording doc output (README, guide, demo README): with `--config` or `$AUTORENAME_PDF_CONFIG` every hint and "revert:" line repeats `--config <path>`; record with the default config location, or edit those out. Docs show real output: re-run them after changing prompts or naming (model answers vary).
 - Global args need `next_help_heading = "Global options"`, otherwise clap mixes them into each subcommand's options.
 - Usage errors become a JSON document only when JSON is wanted; `main::wants_json` decides from raw argv because clap has not parsed `--output` yet.
 - No args + `DISPLAY`/`WAYLAND_DISPLAY` opens the GUI: CLI tests always pass a subcommand. `gui -o json` is a usage error.
@@ -121,6 +123,8 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - Name lists load and edit on the worker (`Msg::Names`): after a profile switch the list is empty/loading for a few frames. Tests wait with `run_until`; `seq` drops superseded loads, edits are refused while `busy()`.
 - kittest: spinners repaint forever → tests use reduce motion. `key_press` sends down and up on separate frames (count input repaints). `Node` has no `label()` → `node.accesskit_node().label()`. `query_all_by_role` + `node.rect()` measures every target.
 - winit 0.30 (eframe 0.37) has no Wayland drag-and-drop: only its X11 backend emits `HoveredFile`/`DroppedFile`. Forcing XWayland (`env -u WAYLAND_DISPLAY`) makes DnD work but the window is upscaled/blurry on Hyprland. `gui/wayland_dnd.rs` listens on winit's `wl_display` (own queue + thread, `Backend::from_foreign_display`) and injects into `RawInput` via `App::raw_input_hook`; `App::on_exit` must stop it before winit disconnects. Accept only the copy action: a `move` drop makes the source delete the file.
+- accesskit 0.25 has no ToggleButton role: a toggle button is `Role::Button` with `toggled` (`WidgetInfo::selected`, `Button::toggle`). kittest reads it via `accesskit_node().toggled()`.
+- Adding a Lucide icon: add the const to `theme::icon`, then rebuild the subset from all `theme::icon` codepoints with `uvx --from fonttools pyftsubset lucide.ttf --unicodes=... --no-hinting` (byte-identical to the shipped subset) and update the sha in `crates/app/assets/README.md`.
 
 ## OS integration & packaging
 - Explorer launches a verb once per selected file, even with `MultiSelectModel=Player` (that only lifts the 15-item limit). `autorename-pdf-gui.exe` coalesces launches via a spool + lock in `%TEMP%\autorename-pdf-launch` (`crates/winlaunch/src/coalesce.rs`). Do not remove it, or 20 files open 20 windows.

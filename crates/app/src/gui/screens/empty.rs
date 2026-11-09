@@ -15,17 +15,29 @@ use crate::gui::screens::settings::mb;
 use crate::gui::theme::{self, Tone, size, space, typ};
 
 /// Card height from the §4.2 rhythm (padding 24, rows 32, gaps 16).
-fn card_h(offline: bool) -> f32 {
+fn card_h(offline: bool, company: bool) -> f32 {
     let head = space::XL + typ::TITLE_SM.line + space::XS + typ::BODY.line + space::LG;
     let seg = size::CONTROL + space::LG;
-    // Offline adds the model caption (4 + 16) under the Ollama row.
+    // Captions under the first row: offline = server helper + model
+    // status (4 + 16 + 16), cloud = model helper (4 + 16).
     let caption = if offline {
+        space::XS + typ::CAPTION.line * 2.0
+    } else {
         space::XS + typ::CAPTION.line
+    };
+    let body = size::CONTROL + caption + space::LG + size::CONTROL;
+    // Company: stacked label, field, helper.
+    let company = if company {
+        space::LG
+            + typ::BODY_STRONG.line
+            + space::XS
+            + size::CONTROL
+            + space::XS
+            + typ::CAPTION.line
     } else {
         0.0
     };
-    let body = size::CONTROL + caption + space::LG + size::CONTROL;
-    head + seg + body + space::XL + size::CONTROL + space::XL
+    head + seg + body + company + space::XL + size::CONTROL + space::XL
 }
 
 pub fn empty(ui: &mut Ui, rect: Rect, m: &mut Model, drop: DropState, acts: &mut Vec<Action>) {
@@ -52,7 +64,7 @@ pub fn empty(ui: &mut Ui, rect: Rect, m: &mut Model, drop: DropState, acts: &mut
         }
         return;
     }
-    let ch = card_h(m.setup.offline) + hint_h;
+    let ch = card_h(m.setup.offline, asks_company(m)) + hint_h;
     let total = space::XL + size::DROP_H + space::XL + ch + space::XL;
     let drop_h = if rect.height() >= total {
         size::DROP_H
@@ -249,7 +261,7 @@ fn row<R>(ui: &mut Ui, text: &str, f: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
         ui.set_height(size::CONTROL);
         let (r, _) = ui.allocate_exact_size(
-            theme::v2(size::LABEL_COL, size::CONTROL),
+            theme::v2(size::SETUP_LABEL_COL, size::CONTROL),
             egui::Sense::hover(),
         );
         paint_galley_v(
@@ -325,8 +337,8 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
         }
         ui.add_space(space::LG);
         if m.setup.offline {
-            row(ui, "Ollama", |ui| {
-                Field::new("Ollama address", &mut m.setup.ollama_url)
+            row(ui, "Ollama server", |ui| {
+                Field::new("Ollama server", &mut m.setup.ollama_url)
                     .mono()
                     .width(theme::TEXT_EDIT_W)
                     .show(ui);
@@ -353,16 +365,10 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                     format!("Uses model {model}. Test connection sends it a one-line request."),
                 ),
             };
-            // Plain rect (a `horizontal` row would take the 32 px minimum).
-            let (cr, _) = ui.allocate_exact_size(
-                theme::v2(ui.available_width(), typ::CAPTION.line),
-                Sense::hover(),
-            );
-            let x = cr.left() + size::LABEL_COL + space::SM;
-            let t = ellipsize_end(ui, &text, typ::CAPTION, cr.right() - x);
-            paint_text(ui, x, cr.center().y, &t, typ::CAPTION, c);
+            caption_line(ui, OLLAMA_HELPER, p.text_muted);
+            caption_line(ui, &text, c);
             ui.add_space(space::LG);
-            row(ui, "OCR", |ui| ocr_row(ui, m, acts));
+            row(ui, "Scan reader", |ui| ocr_row(ui, m, acts));
         } else {
             row(ui, "Provider", |ui| {
                 let names: Vec<String> = PROVIDERS[..4].iter().map(|p| p.1.to_string()).collect();
@@ -399,8 +405,10 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                     .width(ui.available_width())
                     .show(ui);
             });
+            ui.add_space(space::XS);
+            caption_line(ui, MODEL_HELPER, p.text_muted);
             ui.add_space(space::LG);
-            let var = PROVIDERS[m.setup.provider].2;
+            let var = crate::gui::model::key_var(PROVIDERS[m.setup.provider].0);
             let found = std::env::var(var).is_ok() || m.config.env.contains_key(var);
             row(ui, "API key", |ui| {
                 let shown = &mut m.setup.show_key;
@@ -432,6 +440,19 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                 };
                 status(ui, tone, icon, &text);
             });
+        }
+        // Your company (§4.2): optional, only for profiles with `direction`;
+        // same copy as Settings › Naming.
+        if asks_company(m) {
+            ui.add_space(space::LG);
+            // Stacked (the label is longer than the label column); neutral
+            // helper, no warning here (Settings keeps its status).
+            Field::new("Your company (optional)", &mut m.setup.company)
+                .label("Your company (optional)")
+                .hint("e.g. ACME GmbH")
+                .helper(Some(COMPANY_HELPER))
+                .width(theme::TEXT_EDIT_W)
+                .show(ui);
         }
     });
     // Footer: test feedback left, [Test connection] [Save and continue] right.
@@ -475,6 +496,53 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
     }
 }
 
+const COMPANY_HELPER: &str =
+    "Helps tell bills you receive from invoices you send. You can add it later in Settings.";
+
+/// The setup card asks for your company when the active profile (the
+/// starter's `business` before a config exists) uses `direction`, the same
+/// rule as Settings › Naming.
+fn asks_company(m: &Model) -> bool {
+    use crate::gui::screens::settings::Uses;
+    static STARTER: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+    let tree = match &m.config.tree {
+        Some(t) => Some(t),
+        None => STARTER
+            .get_or_init(|| autorename_core::config::parse_yaml(crate::cmd::STARTER_CONFIG).ok())
+            .as_ref(),
+    };
+    let Some(tree) = tree else { return true };
+    let id = m
+        .config
+        .settings
+        .as_ref()
+        .map(|s| s.profile_id.clone())
+        .or_else(|| {
+            tree.get("profile")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "business".into());
+    Uses::of(tree, &id).unwrap_or(Uses::ALL).direction
+}
+
+const OLLAMA_HELPER: &str =
+    "Where Ollama runs. Usually this computer; change it only if Ollama runs elsewhere.";
+const MODEL_HELPER: &str =
+    "The recommended model is preselected. Change it only if you need another.";
+
+/// One caption line aligned with the setup fields (plain rect: a
+/// `horizontal` row would take the 32 px minimum).
+fn caption_line(ui: &mut Ui, text: &str, color: egui::Color32) {
+    let (cr, _) = ui.allocate_exact_size(
+        theme::v2(ui.available_width(), typ::CAPTION.line),
+        Sense::hover(),
+    );
+    let x = cr.left() + size::SETUP_LABEL_COL + space::SM;
+    let t = ellipsize_end(ui, text, typ::CAPTION, cr.right() - x);
+    paint_text(ui, x, cr.center().y, &t, typ::CAPTION, color);
+}
+
 fn ocr_row(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
     let p = theme::palette(ui);
     let lang = m
@@ -487,7 +555,7 @@ fn ocr_row(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
     let Some(pack) = autorename_core::ocr::pack_for_language(&lang) else {
         label(
             ui,
-            "No OCR pack for this language",
+            "No scan reader for this language",
             typ::CAPTION,
             p.text_muted,
         );
@@ -518,7 +586,7 @@ fn ocr_row(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
         let label = format!("{} of {}", mb(done), mb(total.max(1)));
         Progress {
             fraction: Some(done as f32 / total.max(1) as f32),
-            label: &format!("Downloading OCR models, {label}"),
+            label: &format!("Downloading the scan reader, {label}"),
         }
         .show_at(ui, bar);
         paint_text(
@@ -541,7 +609,7 @@ fn ocr_row(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
         return;
     }
     Badge::new(Tone::Neutral, "Not installed").show(ui);
-    let t = format!("Download OCR models ({})", mb(pack.total_size()));
+    let t = format!("Download scan reader ({})", mb(pack.total_size()));
     if Button::secondary(&t)
         .icon(theme::icon::DOWNLOAD)
         .enabled(m.settings.model_busy.is_none() && !m.downloads_blocked())

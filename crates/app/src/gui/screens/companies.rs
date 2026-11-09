@@ -9,7 +9,7 @@ use crate::gui::components::{
     paint_text_center, paint_wrapped, plural, segmented, wrapped_lines,
 };
 use crate::gui::model::{Model, noun};
-use crate::gui::pages::{CompanyFilter, entry_caption};
+use crate::gui::pages::{CompanyFilter, entry_caption, spellings_caption};
 use crate::gui::theme::{self, Tone, size, space, stroke, typ};
 use autorename_core::harmonize::{self, Source};
 
@@ -31,6 +31,7 @@ pub fn companies(ui: &mut Ui, body: Rect, m: &mut Model, acts: &mut Vec<Action>)
     let tr = Rect::from_min_size(body.min, theme::v2(body.width(), size::TOOLBAR));
     toolbar(ui, tr, m);
     let content = Rect::from_min_max(egui::pos2(body.left(), tr.bottom()), body.max);
+    // The detail pane holds the review actions: always visible (§4.8).
     let dw = theme::detail_width(ui.ctx().content_rect().width());
     let list = Rect::from_min_size(
         content.min,
@@ -76,9 +77,9 @@ fn toolbar(ui: &mut Ui, rect: Rect, m: &mut Model) {
             ui.spacing_mut().item_spacing.x = space::MD;
             let opts = [
                 format!("All {n}"),
-                format!("Needs review {review}"),
-                "Learned".to_string(),
-                "Manual".to_string(),
+                format!("Needs a look {review}"),
+                "Added automatically".to_string(),
+                "Added by you".to_string(),
             ];
             let filters = [
                 CompanyFilter::All,
@@ -168,12 +169,13 @@ fn list_pane(ui: &mut Ui, rect: Rect, m: &mut Model) {
                     let l1 = rr.top() + space::SM + typ::BODY.line / 2.0;
                     let l2 = l1 + typ::BODY.line / 2.0 + space::XS + typ::CAPTION.line / 2.0;
                     let mut right = rr.right() - space::LG;
+                    // Provenance is in the caption; only the review state
+                    // gets a badge.
                     let mut badges = Vec::new();
                     if e.review {
-                        badges.push(Badge::new(Tone::Warning, "Review").icon(theme::icon::FLAG));
-                    }
-                    if e.source == Source::Auto {
-                        badges.push(Badge::new(Tone::Neutral, "Auto"));
+                        badges.push(
+                            Badge::new(Tone::Warning, "Needs a look").icon(theme::icon::FLAG),
+                        );
                     }
                     for b in badges.iter().rev() {
                         let bw = b.width(ui);
@@ -194,7 +196,7 @@ fn list_pane(ui: &mut Ui, rect: Rect, m: &mut Model) {
                         "{}, {}{}",
                         e.canonical,
                         entry_caption(&e),
-                        if e.review { ", needs review" } else { "" }
+                        if e.review { ", needs a look" } else { "" }
                     );
                     resp.widget_info(|| {
                         WidgetInfo::selected(egui::Role::ListItem, true, sel, &a11y)
@@ -273,7 +275,8 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         ui.set_width(w);
                         label(ui, &e.canonical, typ::TITLE_SM, p.text);
                         ui.add_space(space::XS);
-                        label(ui, &entry_caption(&e), typ::CAPTION, p.text_muted);
+                        // Provenance lives in the Source section below.
+                        label(ui, &spellings_caption(&e), typ::CAPTION, p.text_muted);
                         if let Some(err) = &m.companies.error {
                             ui.add_space(space::SM);
                             let n = wrapped_lines(ui, err, typ::CAPTION, w);
@@ -284,10 +287,10 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                             paint_wrapped(ui, r.min, w, err, typ::CAPTION, p.danger);
                         }
                         ui.add_space(space::XL);
-                        crate::gui::components::section_header(ui, "Aliases");
+                        crate::gui::components::section_header(ui, "Other spellings");
                         ui.add_space(space::SM);
                         if e.aliases.is_empty() && e.learned.is_empty() {
-                            label(ui, "No aliases yet.", typ::BODY, p.text_muted);
+                            label(ui, "No other spellings yet.", typ::BODY, p.text_muted);
                         }
                         for (a, learned) in e
                             .aliases
@@ -297,28 +300,46 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         {
                             let (r, _) =
                                 ui.allocate_exact_size(theme::v2(w, size::CONTROL), Sense::hover());
-                            let t =
-                                ellipsize_end(ui, a, typ::MONO_SM, w - size::CONTROL - space::SM);
-                            let tr =
-                                paint_text(ui, r.left(), r.center().y, &t, typ::MONO_SM, p.text);
+                            // Right to left: remove button, provenance badge
+                            // (only where Source doesn't already say it: your
+                            // entry, learned spelling); the spelling gets the
+                            // rest.
+                            let mut right = r.right();
                             if learned {
-                                let b = Badge::new(Tone::Neutral, "Learned");
-                                let bw = b.width(ui);
-                                b.paint_at(
-                                    ui,
-                                    Rect::from_min_size(
-                                        egui::pos2(
-                                            tr.right() + space::SM,
-                                            r.center().y - size::BADGE / 2.0,
+                                right -= size::CONTROL_SM + space::SM;
+                                if e.source == Source::User {
+                                    let b = Badge::new(Tone::Neutral, "Added automatically");
+                                    let bw = b.width(ui);
+                                    b.paint_at(
+                                        ui,
+                                        Rect::from_min_size(
+                                            egui::pos2(
+                                                right - bw,
+                                                r.center().y - size::BADGE / 2.0,
+                                            ),
+                                            theme::v2(bw, size::BADGE),
                                         ),
-                                        theme::v2(bw, size::BADGE),
-                                    ),
-                                );
+                                    );
+                                    right -= bw + space::SM;
+                                }
+                            }
+                            let t = ellipsize_end(ui, a, typ::MONO_SM, (right - r.left()).max(0.0));
+                            if t != *a {
+                                let tr = Rect::from_min_max(r.min, egui::pos2(right, r.bottom()));
+                                ui.interact(
+                                    tr,
+                                    ui.scope_id().with(("spelling", a)),
+                                    Sense::hover(),
+                                )
+                                .on_hover_text(a.as_str());
+                            }
+                            paint_text(ui, r.left(), r.center().y, &t, typ::MONO_SM, p.text);
+                            if learned {
                                 let xr = Rect::from_center_size(
                                     egui::pos2(r.right() - size::CONTROL_SM / 2.0, r.center().y),
                                     theme::v2(size::CONTROL_SM, size::CONTROL_SM),
                                 );
-                                let a11y = format!("Remove alias {a}");
+                                let a11y = format!("Remove spelling {a}");
                                 if Button::icon_only(theme::icon::X, &a11y)
                                     .size(crate::gui::components::BSize::Sm)
                                     .enabled(idle)
@@ -333,8 +354,8 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         crate::gui::components::section_header(ui, "Source");
                         ui.add_space(space::SM);
                         let src = match e.source {
-                            Source::Auto => "Learned automatically while renaming",
-                            Source::User => "Hand-written in the list file",
+                            Source::Auto => "Added automatically while renaming",
+                            Source::User => "Added by you in the list file",
                         };
                         label(ui, src, typ::BODY, p.text);
                         if let Some(d) = &e.added {
@@ -345,7 +366,7 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         if e.source == Source::User {
                             label(
                                 ui,
-                                "Hand-written · not editable here",
+                                "Added by you in the list file · not editable here",
                                 typ::BODY,
                                 p.text_muted,
                             );
@@ -487,24 +508,12 @@ fn merge_dialog(ctx: &egui::Context, m: &mut Model, acts: &mut Vec<Action>) {
                     typ::BODY,
                     p.text,
                 );
-                let sc = format!("similarity {score:.2}");
-                let sw = crate::gui::components::text_width(ui, &sc, typ::CAPTION);
-                paint_text(
-                    ui,
-                    r.right() - space::MD - sw,
-                    r.center().y,
-                    &sc,
-                    typ::CAPTION,
-                    p.text_muted,
-                );
+                // The score is expert detail: tooltip only.
+                let sc = format!("Similarity {score:.2}");
                 focus_ring(ui, &resp, r, theme::radius::MD, true);
+                let resp = resp.on_hover_text(&sc);
                 resp.widget_info(|| {
-                    WidgetInfo::selected(
-                        egui::Role::RadioButton,
-                        true,
-                        sel,
-                        format!("{name}, {sc}"),
-                    )
+                    WidgetInfo::selected(egui::Role::RadioButton, true, sel, name.as_str())
                 });
                 if resp.clicked() {
                     target = Some(name.clone());
@@ -568,7 +577,7 @@ fn rename_dialog(ctx: &egui::Context, m: &mut Model, acts: &mut Vec<Action>) {
             ui.spacing_mut().item_spacing = theme::v2(space::SM, 0.0);
             label(ui, &title, typ::TITLE, p.text);
             ui.add_space(space::LG);
-            let helper = format!("\u{201c}{old}\u{201d} is kept as an alias.");
+            let helper = format!("\u{201c}{old}\u{201d} is kept as another spelling.");
             let empty = new.trim().is_empty();
             Field::new("New name", &mut new)
                 .label("New name")

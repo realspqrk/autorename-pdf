@@ -26,9 +26,8 @@ pub enum Tab {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
     All,
-    Ready,
-    Review,
-    Errors,
+    /// Review and error rows (§4.3 "Needs a look").
+    NeedsLook,
 }
 
 #[derive(Clone, Debug)]
@@ -142,24 +141,42 @@ impl Row {
             .or_else(|| self.suggested_name().map(str::to_string))
     }
 
-    /// Short error summary for line 1 (§4.9).
+    /// Short error summary for line 1 (§4.9): the rename failure of a
+    /// result row, else the analysis error.
     pub fn error_summary(&self) -> Option<String> {
-        let e = self
-            .report
-            .as_ref()
-            .and_then(|r| r.error.as_ref())
-            .or_else(|| self.item.as_ref()?.error.as_ref())?;
-        Some(error_copy(e))
+        if let Some(e) = self.report.as_ref().and_then(|r| r.error.as_ref()) {
+            return Some(rename_error_copy(e));
+        }
+        Some(error_copy(self.item.as_ref()?.error.as_ref()?))
     }
 
-    pub fn first_warning(&self) -> Option<String> {
+    /// Line 2 problem sentence in plain words (§4.3); `noun` is the name
+    /// list's singular ("company"). The raw warning stays in the details.
+    /// Result rows show apply-time problems first (metadata, learning,
+    /// disk), and nothing under a rename failure (line 1 says it).
+    pub fn problem(&self, noun: &str) -> Option<String> {
         let item = self.item.as_ref()?;
-        if let Some(w) = item.warnings.first() {
-            return Some(sentence(w));
+        let warnings = match &self.report {
+            Some(rep) if rep.error.is_some() => return None,
+            Some(rep) => {
+                let apply = rep.warnings.iter().find(|w| !item.warnings.contains(w));
+                if let Some(w) = apply {
+                    return Some(plain_warning(w));
+                }
+                &rep.warnings
+            }
+            None => &item.warnings,
+        };
+        if let Some(w) = warnings.first() {
+            return Some(plain_warning(w));
         }
+        let entry_added = self
+            .report
+            .as_ref()
+            .is_none_or(|r| r.learn_status == LearnStatus::EntryAdded);
         match &item.learn {
-            Some(LearnAction::NewEntry { review: true, .. }) => {
-                Some("New company needs review".into())
+            Some(LearnAction::NewEntry { review: true, .. }) if entry_added && !self.dont_learn => {
+                Some(format!("New {noun}. Check the spelling."))
             }
             _ => None,
         }
@@ -185,20 +202,130 @@ fn sentence(s: &str) -> String {
     }
 }
 
-/// Plain-words error copy (§4.9, §7): no codes in the headline.
-pub fn error_copy(e: &ErrorInfo) -> String {
+/// Plain cause of a file-system error from its message (§4.9), if known.
+/// `rename`: the error came from renaming (else from reading for analysis).
+fn io_cause(e: &ErrorInfo, rename: bool) -> Option<&'static str> {
+    let m = e.message.to_lowercase();
+    let has = |n: &[&str]| n.iter().any(|x| m.contains(x));
+    Some(
+        if has(&[
+            "another program",
+            "another process",
+            "os error 32",
+            "os error 33",
+            "resource busy",
+        ]) {
+            "File is open in another program. Close it and try again"
+        } else if has(&[
+            "permission denied",
+            "access is denied",
+            "os error 13",
+            "os error 5)",
+            "read-only",
+        ]) {
+            if rename {
+                "No permission to change this file"
+            } else {
+                "Can't open this file (no permission)"
+            }
+        } else if has(&[
+            "no space left",
+            "disk full",
+            "not enough space",
+            "os error 28",
+            "os error 112",
+        ]) {
+            "The disk is full. Free some space and try again"
+        } else {
+            return None;
+        },
+    )
+}
+
+/// Line 1 of a result row whose rename failed (§4.6, §4.9).
+pub fn rename_error_copy(e: &ErrorInfo) -> String {
     match e.code.as_str() {
-        "auth_error" => "The provider rejected the API key".into(),
+        "conflict" => "A file with the new name already exists".into(),
+        "source_changed" => "File changed since analysis · Re-analyze".into(),
+        _ => io_cause(e, true).map_or_else(|| "Couldn't rename the file".into(), str::to_string),
+    }
+}
+
+/// Plain-words error copy (§4.3, §4.9, §7): no codes in the headline.
+pub fn error_copy(e: &ErrorInfo) -> String {
+    const READ: &str = "Couldn't read the file";
+    match e.code.as_str() {
+        "auth_error" => "The AI service rejected the API key".into(),
         "provider_error" if e.message.to_lowercase().contains("timed out") => {
-            "Extraction failed · Provider timeout".into()
+            format!("{READ} · The AI service didn't answer in time")
         }
+        "provider_error" => format!("{READ} · The AI service reported a problem"),
+        "no_content" => format!("{READ} · No text was found in it"),
+        "ocr_failed" => format!("{READ} · The scan couldn't be read"),
         "source_changed" => "File changed since analysis · Re-analyze".into(),
         "conflict" => "A file with the new name already exists".into(),
-        "ocr_models_missing" => "This scan needs OCR models, which aren't installed".into(),
-        "io_error" => "Couldn't read or write the file".into(),
+        "ocr_models_missing" => "This scan needs the scan reader, which isn't installed".into(),
+        "io_error" => io_cause(e, false).map_or_else(|| READ.into(), str::to_string),
         _ => {
             let m = e.message.trim_end_matches('.');
-            format!("Extraction failed · {}", sentence(m))
+            format!("{READ} · {}", sentence(m))
+        }
+    }
+}
+
+/// Core warning strings (`PlanItem::warnings`: extraction, direction,
+/// amount, name matching) as one plain sentence for office users (§4.3).
+/// Unknown strings fall back to the raw text as a sentence.
+pub fn plain_warning(w: &str) -> String {
+    let code = w.split_once(':').map_or(w, |(c, _)| c).trim();
+    let plain = match code {
+        // Own company read as the other party: the company is wrong too.
+        "direction_uncertain" if w.contains("(your own company) as the counterparty") => {
+            "Your own company was read as the other party. Check the company and type."
+        }
+        "currency_missing" => "No currency was found. Check the amount.",
+        "direction_uncertain" => "It's unclear whether you sent or received this. Check the type.",
+        "counterparty_missing" => "No company name was found. Check the company.",
+        "visual_scan_incomplete" => "Some pages couldn't be checked fully. Check the name.",
+        "ocr_models_missing" => "This scan needs the scan reader, which isn't installed.",
+        // Apply-time problems (result rows).
+        "Enrichment failed" => "Renamed, but the document details couldn't be saved in it.",
+        "durability_warning" => "Renamed, but saving wasn't fully confirmed. Check the file.",
+        "Could not open PDF" => "The PDF couldn't be opened. Check the file.",
+        "OCR returned no text" => "No text was recognized in the scan. Check the name.",
+        c if c.starts_with("Could not extract text from page") => {
+            "Some text couldn't be read. Check the name."
+        }
+        c if c.starts_with("Could not render page") || c.starts_with("OCR failed on page") => {
+            "A page couldn't be read. Check the name."
+        }
+        c if c.starts_with("ocr_") || c == "pdfium_missing" => {
+            "Text recognition wasn't available. Check the name."
+        }
+        c if c.ends_with(" not learned") => {
+            let field = noun(c.trim_end_matches(" not learned"));
+            return format!("Renamed, but the {field} couldn't be added to your list.");
+        }
+        c if c.ends_with(" decider failed") => {
+            let field = noun(c.trim_end_matches(" decider failed"));
+            return format!("The {field} couldn't be checked against your list. Check the name.");
+        }
+        _ => return sentence(w),
+    };
+    plain.into()
+}
+
+/// Display name of a profile id ("business" → "Business").
+pub fn profile_label(id: &str) -> String {
+    match id {
+        "business" => "Business".into(),
+        "academic" => "Academic".into(),
+        other => {
+            let mut c = other.replace(['_', '-'], " ");
+            if let Some(f) = c.get_mut(0..1) {
+                f.make_ascii_uppercase();
+            }
+            c
         }
     }
 }
@@ -384,6 +511,9 @@ impl ConfigState {
         st
     }
 
+    /// Switch the active profile in memory (tests; the GUI switches
+    /// profiles only by saving Settings).
+    #[cfg(test)]
     pub fn select_profile(&mut self, id: &str) {
         if let Some(tree) = &self.tree {
             match config::settings(tree, Some(id)) {
@@ -439,12 +569,11 @@ pub struct Model {
     pub tab: Tab,
     /// Tab to return to when Settings closes (gear / Esc).
     pub prev_tab: Tab,
-    /// Settings › About license dialog is open.
-    pub license_open: bool,
+    /// Settings › About document dialog (license, third-party notices).
+    pub doc_open: Option<super::pages::TextDoc>,
     pub rows: Vec<Row>,
     pub active: Option<usize>,
     pub filter: Filter,
-    pub search: String,
     pub phase: Phase,
     pub meta: Option<PlanMeta>,
     pub report: Option<ApplyReport>,
@@ -488,16 +617,25 @@ pub struct SetupForm {
     pub api_key: String,
     pub show_key: bool,
     pub ollama_url: String,
+    /// `company.name` (optional; asked only for profiles with `direction`).
+    pub company: String,
     pub error: Option<String>,
 }
 
-pub const PROVIDERS: [(&str, &str, &str); 5] = [
-    ("openai", "OpenAI", "OPENAI_API_KEY"),
-    ("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
-    ("gemini", "Gemini", "GEMINI_API_KEY"),
-    ("xai", "xAI", "XAI_API_KEY"),
-    ("ollama", "Ollama", ""),
+/// Provider id and display name; the API-key variable comes from core
+/// (`config::default_key_var`, see [`key_var`]).
+pub const PROVIDERS: [(&str, &str); 5] = [
+    ("openai", "OpenAI"),
+    ("anthropic", "Anthropic"),
+    ("gemini", "Gemini"),
+    ("xai", "xAI"),
+    ("ollama", "Ollama"),
 ];
+
+/// Default API-key variable of a provider ("" for Ollama).
+pub fn key_var(id: &str) -> &'static str {
+    config::default_key_var(id).unwrap_or("")
+}
 
 pub fn provider_label(id: &str) -> &str {
     PROVIDERS.iter().find(|p| p.0 == id).map_or(id, |p| p.1)
@@ -505,21 +643,29 @@ pub fn provider_label(id: &str) -> &str {
 
 impl Model {
     pub fn new(config: ConfigState) -> Self {
+        // Setup card pre-fill from an existing config.
+        let company = config
+            .tree
+            .as_ref()
+            .and_then(|t| t.pointer("/company/name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
         Model {
             tab: Tab::Rename,
             prev_tab: Tab::Rename,
-            license_open: false,
+            doc_open: None,
             rows: Vec::new(),
             active: None,
             filter: Filter::All,
-            search: String::new(),
             phase: Phase::Idle,
             meta: None,
             report: None,
             undo: None,
             undone: false,
             config,
-            detail_visible: true,
+            // Expert view, opt-in (§3).
+            detail_visible: false,
             detail_w: None,
             editing: None,
             banners: Vec::new(),
@@ -532,6 +678,7 @@ impl Model {
                     .unwrap_or_default()
                     .to_string(),
                 ollama_url: "http://localhost:11434".into(),
+                company,
                 ..Default::default()
             },
             setup_test: None,
@@ -655,6 +802,11 @@ impl Model {
         r.report.is_none() && (r.item.is_none() || self.is_stale(r))
     }
 
+    /// §4.1 details toggle: only on Rename while a plan or result exists.
+    pub fn details_toggle_shown(&self) -> bool {
+        self.tab == Tab::Rename && (!self.rows.is_empty() || self.report.is_some())
+    }
+
     pub fn busy(&self) -> bool {
         self.analyzing() || self.renaming() || self.undoing.is_some()
     }
@@ -664,8 +816,10 @@ impl Model {
         for r in &self.rows {
             c.total += 1;
             match r.status() {
-                RowStatus::Ready | RowStatus::Renamed | RowStatus::Unchanged => c.ready += 1,
-                RowStatus::Cancelled => {}
+                RowStatus::Ready
+                | RowStatus::Renamed
+                | RowStatus::Unchanged
+                | RowStatus::Cancelled => {}
                 RowStatus::Review => c.review += 1,
                 RowStatus::Error => c.errors += 1,
                 RowStatus::Queued | RowStatus::Analyzing => c.pending += 1,
@@ -681,21 +835,12 @@ impl Model {
     }
 
     pub fn visible(&self) -> Vec<usize> {
-        let q = self.search.to_lowercase();
         self.rows
             .iter()
             .enumerate()
             .filter(|(_, r)| match self.filter {
                 Filter::All => true,
-                Filter::Ready => r.status() == RowStatus::Ready,
-                Filter::Review => r.status() == RowStatus::Review,
-                Filter::Errors => r.status() == RowStatus::Error,
-            })
-            .filter(|(_, r)| {
-                q.is_empty()
-                    || r.old_name().to_lowercase().contains(&q)
-                    || r.final_name()
-                        .is_some_and(|n| n.to_lowercase().contains(&q))
+                Filter::NeedsLook => matches!(r.status(), RowStatus::Review | RowStatus::Error),
             })
             .map(|(i, _)| i)
             .collect()
@@ -874,11 +1019,52 @@ impl Model {
                 r.report = Some(f.clone());
             }
         }
-        // Excluded rows leave the result list.
+        // Excluded rows leave the result list; every result stays visible.
         self.rows.retain(|r| r.report.is_some());
+        self.filter = Filter::All;
         self.active = (!self.rows.is_empty()).then_some(0);
         self.report = Some(report);
         self.phase = Phase::Done;
+    }
+
+    /// Keep the active row and the inline edit inside the visible rows
+    /// (after a filter change): else the first visible row, or none.
+    pub fn sync_active(&mut self) {
+        let visible = self.visible();
+        if self.active.is_some_and(|a| !visible.contains(&a)) {
+            self.active = visible.first().copied();
+        }
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|(e, _)| !visible.contains(e))
+        {
+            self.editing = None;
+        }
+    }
+
+    /// New name-list entries flagged for review that this batch actually
+    /// created (report `EntryAdded`, renamed or unchanged), deduplicated.
+    pub fn review_entries(&self) -> usize {
+        if self.undone {
+            return 0;
+        }
+        let mut names: Vec<String> = self
+            .rows
+            .iter()
+            .filter(|r| {
+                r.report
+                    .as_ref()
+                    .is_some_and(|f| f.learn_status == LearnStatus::EntryAdded)
+            })
+            .filter_map(|r| match &r.item.as_ref()?.learn {
+                Some(LearnAction::NewEntry { name, review: true }) => Some(name.to_lowercase()),
+                _ => None,
+            })
+            .collect();
+        names.sort();
+        names.dedup();
+        names.len()
     }
 
     pub fn clear(&mut self) {
@@ -892,7 +1078,6 @@ impl Model {
         self.editing = None;
         self.phase = Phase::Idle;
         self.filter = Filter::All;
-        self.search.clear();
     }
 }
 
@@ -909,12 +1094,18 @@ fn target_of(r: &Row) -> Option<PathBuf> {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Counts {
     pub total: usize,
-    pub ready: usize,
     pub review: usize,
     pub errors: usize,
     pub pending: usize,
     pub checked: usize,
     pub edited: usize,
+}
+
+impl Counts {
+    /// Rows that need a look (§4.3): review + error.
+    pub fn needs_look(&self) -> usize {
+        self.review + self.errors
+    }
 }
 
 pub fn tier_label(t: Option<Tier>) -> Option<&'static str> {
@@ -923,13 +1114,6 @@ pub fn tier_label(t: Option<Tier>) -> Option<&'static str> {
         Tier::Ocr => "OCR",
         Tier::VisionNeeded => "Vision",
     })
-}
-
-pub fn enrich_label(e: &EnrichPlan) -> (&'static str, bool) {
-    match e {
-        EnrichPlan::Will => ("Metadata", true),
-        EnrichPlan::Skip { .. } => ("Metadata skipped", false),
-    }
 }
 
 pub fn skip_reason_copy(reason: &str) -> String {
@@ -1070,21 +1254,6 @@ pub fn fingerprint(s: &Settings) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     v.to_string().hash(&mut h);
     h.finish()
-}
-
-pub trait LearnStatusExt {
-    fn badge(&self) -> Option<(&'static str, super::theme::Tone, char)>;
-}
-
-impl LearnStatusExt for LearnStatus {
-    fn badge(&self) -> Option<(&'static str, super::theme::Tone, char)> {
-        use super::theme::{Tone, icon};
-        match self {
-            LearnStatus::AliasAdded => Some(("Alias added", Tone::Accent, icon::LINK)),
-            LearnStatus::EntryAdded => Some(("New company", Tone::Accent, icon::USER_PLUS)),
-            _ => None,
-        }
-    }
 }
 
 /// Words for AccessKit row labels (§8).

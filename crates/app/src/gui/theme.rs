@@ -35,7 +35,7 @@ pub mod size {
     pub const HEADER: f32 = 48.0;
     pub const TOOLBAR: f32 = 40.0;
     pub const ACTION_BAR: f32 = 56.0;
-    /// §5.2 badge height; interactive chip height is `CONTROL_SM`.
+    /// §5.2 badge height.
     pub const BADGE: f32 = 20.0;
     /// §5.4 segment inside the 32 px container.
     pub const SEGMENT: f32 = 28.0;
@@ -52,9 +52,9 @@ pub mod size {
     pub const CHECKBOX: f32 = 16.0;
     /// §5.1 min width of md text buttons.
     pub const BUTTON_MIN_W: f32 = 64.0;
-    /// §4.1 toolbar search field width.
+    /// §4.8 Companies toolbar search field width.
     pub const SEARCH_W: f32 = 200.0;
-    /// Header profile combo width.
+    /// Compact combo width (setup card model picker).
     pub const COMBO_W: f32 = 120.0;
     /// §4.2 drop zone / setup card width and drop-zone min height.
     pub const CARD_W: f32 = 640.0;
@@ -67,6 +67,8 @@ pub mod size {
     pub const SETTINGS_COL: f32 = 640.0;
     /// §4.4 detail field label column.
     pub const LABEL_COL: f32 = 72.0;
+    /// §4.2 setup card label column ("Ollama server", "Scan reader").
+    pub const SETUP_LABEL_COL: f32 = 104.0;
     /// §3 detail pane clamp and divider.
     pub const DETAIL_MIN: f32 = 320.0;
     pub const DETAIL_MAX: f32 = 560.0;
@@ -275,6 +277,7 @@ pub mod icon {
     pub const ROTATE_CCW: char = '\u{e148}';
     pub const SQUARE: char = '\u{e167}';
     pub const MINUS: char = '\u{e11c}';
+    pub const PANEL_RIGHT: char = '\u{e431}';
 }
 
 /// §2.5 colors.

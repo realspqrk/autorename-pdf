@@ -1,12 +1,10 @@
-//! §4.1 Header: mark + title, tabs, privacy chip, profile combo, settings.
+//! §4.1 Header: mark + title, tabs, Offline badge, details toggle, settings.
 
 use egui::{Rect, Sense, Ui, WidgetInfo};
 
 use super::Action;
-use crate::gui::components::{
-    Badge, Button, anim, chip, focus_ring, galley, in_rect, mix, paint_galley_v,
-};
-use crate::gui::model::{Model, Tab, provider_label};
+use crate::gui::components::{Badge, Button, anim, focus_ring, galley, mix, paint_galley_v};
+use crate::gui::model::{Model, Tab};
 use crate::gui::theme::{self, Tone, size, space, stroke, typ};
 
 pub fn header(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
@@ -90,7 +88,7 @@ pub fn header(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
         }
         focus_ring(ui, &resp, r, theme::radius::MD, false);
         let a11y = match count {
-            Some(n) => format!("{label}, {n} need review"),
+            Some(n) => format!("{label}, {n} need a look"),
             None => label.to_string(),
         };
         resp.widget_info(|| WidgetInfo::selected(egui::Role::Tab, true, active, &a11y));
@@ -100,103 +98,70 @@ pub fn header(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
         tx = r.right() + space::XS;
     }
 
-    // Right cluster (right to left): settings, profile combo, privacy chip.
-    let right = Rect::from_min_max(
-        egui::pos2(tx, rect.top()),
-        egui::pos2(rect.right() - space::LG, rect.bottom()),
-    );
-    in_rect(ui, right, |ui| {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = space::SM;
-            let open = m.tab == Tab::Settings;
-            if Button::icon_only(theme::icon::SETTINGS, "Settings")
-                .active(open)
-                .tooltip(if open { "Close settings" } else { "Settings" })
-                .show(ui)
-                .clicked()
-            {
-                acts.push(Action::ToggleSettings);
-            }
-            let current = m
-                .config
-                .settings
-                .as_ref()
-                .map(|s| s.profile_id.clone())
-                .unwrap_or_else(|| "business".into());
-            let enabled = m.is_set_up() && !m.busy();
-            let ids: Vec<String> = if m.config.profiles.is_empty() {
-                vec![current.clone()]
-            } else {
-                m.config.profiles.clone()
-            };
-            let names: Vec<String> = ids.iter().map(|i| profile_label(i)).collect();
-            let mut sel = ids.iter().position(|i| *i == current).unwrap_or(0);
-            let (_, changed) = crate::gui::components::Select {
-                a11y: "Profile",
-                width: size::COMBO_W,
-                options: &names,
-                enabled,
-                mono: false,
-            }
-            .show(ui, &mut sel);
-            if changed {
-                acts.push(Action::SelectProfile(ids[sel].clone()));
-            }
-            let (tone, icon, text, a11y) = privacy(m);
-            if chip(ui, tone, icon, &text, &a11y).clicked() {
-                acts.push(Action::OpenSettings(crate::gui::pages::page::PROCESSING));
-            }
-        });
-    });
-}
-
-pub fn profile_label(id: &str) -> String {
-    match id {
-        "business" => "Business".into(),
-        "academic" => "Academic".into(),
-        other => {
-            let mut c = other.replace(['_', '-'], " ");
-            if let Some(f) = c.get_mut(0..1) {
-                f.make_ascii_uppercase();
-            }
-            c
-        }
-    }
-}
-
-fn privacy(m: &Model) -> (Tone, char, String, String) {
-    match &m.config.settings {
-        None => (
-            Tone::Warning,
-            theme::icon::TRIANGLE_ALERT,
-            "Not set up".into(),
-            "Privacy: AI provider not set up. Open privacy settings".into(),
+    // Right cluster (right to left): settings, details toggle (Rename with
+    // a plan or result), passive Offline badge. Settings live only in
+    // Settings (§4.1).
+    let gear = Rect::from_min_size(
+        egui::pos2(
+            rect.right() - space::LG - size::CONTROL,
+            cy - size::CONTROL / 2.0,
         ),
-        Some(s) => {
-            let prov = provider_label(s.ai.provider.id());
-            let offline = matches!(s.privacy, autorename_core::config::Privacy::Offline);
-            if offline {
-                let t = format!("Offline · {prov} {}", s.ai.model);
-                (
-                    Tone::Success,
-                    theme::icon::SHIELD_CHECK,
-                    t.clone(),
-                    format!(
-                        "Privacy: offline, {prov} {}. Open privacy settings",
-                        s.ai.model
-                    ),
-                )
-            } else {
-                (
-                    Tone::Neutral,
-                    theme::icon::CLOUD,
-                    format!("Cloud · {prov} {}", s.ai.model),
-                    format!(
-                        "Privacy: cloud, {prov} {}. Open privacy settings",
-                        s.ai.model
-                    ),
-                )
-            }
+        theme::v2(size::CONTROL, size::CONTROL),
+    );
+    let open = m.tab == Tab::Settings;
+    if Button::icon_only(theme::icon::SETTINGS, "Settings")
+        .active(open)
+        .tooltip(if open { "Close settings" } else { "Settings" })
+        .show_at(ui, gear)
+        .clicked()
+    {
+        acts.push(Action::ToggleSettings);
+    }
+    let mut left = gear.left();
+    if m.details_toggle_shown() {
+        // Icon + "Details" (§4.1); the id stays fixed while the label flips.
+        let open = m.detail_visible;
+        let (a11y, tip) = if open {
+            ("Hide details", "Hide details (Ctrl+\\)")
+        } else {
+            ("Show details", "Show details (Ctrl+\\)")
+        };
+        let b = Button::ghost("Details")
+            .icon(theme::icon::PANEL_RIGHT)
+            .toggle(open)
+            .a11y(a11y)
+            .tooltip(tip)
+            .id(egui::Id::unique("details_toggle"));
+        let w = b.width(ui);
+        let r = Rect::from_min_size(
+            egui::pos2(gear.left() - space::SM - w, gear.top()),
+            theme::v2(w, size::CONTROL),
+        );
+        if b.show_at(ui, r).clicked() {
+            acts.push(Action::ToggleDetails);
+        }
+        left = r.left();
+    }
+    let offline = m
+        .config
+        .settings
+        .as_ref()
+        .is_some_and(|s| s.privacy == autorename_core::config::Privacy::Offline);
+    if offline {
+        let b = Badge::new(Tone::Success, "Offline").icon(theme::icon::SHIELD_CHECK);
+        let w = b.width(ui);
+        let br = Rect::from_min_size(
+            egui::pos2(left - space::SM - w, cy - size::BADGE / 2.0),
+            theme::v2(w, size::BADGE),
+        );
+        if br.left() > tx {
+            b.paint_at(ui, br);
+            ui.interact(br, ui.scope_id().with("offline_badge"), Sense::hover())
+                .on_hover_text(OFFLINE_TIP)
+                .widget_info(|| WidgetInfo::labeled(egui::Role::Label, true, OFFLINE_A11Y));
         }
     }
 }
+
+const OFFLINE_TIP: &str = "Documents stay on this computer. Change this in Settings › Processing.";
+const OFFLINE_A11Y: &str = "Offline. Documents stay on this computer";

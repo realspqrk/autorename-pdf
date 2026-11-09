@@ -70,7 +70,9 @@ fn specs() -> Vec<Spec> {
             quality: 0.62,
             enrich: None,
             learn: new_entry("Telekom Deutschland", true),
-            warnings: &["low confidence on date: two dates found (28.10.25, 01.11.25)"],
+            warnings: &[
+                "currency_missing: no currency found for the amount \"54,99\"; please review",
+            ],
             error: None,
             fields: f("28.10.25", "TELEKOM DEUTSCHLAND GMBH", "AP", "54,99"),
         },
@@ -95,7 +97,7 @@ fn specs() -> Vec<Spec> {
             quality: 0.12,
             enrich: None,
             learn: None,
-            warnings: &["low text quality, read from page images"],
+            warnings: &["OCR returned no text"],
             error: None,
             fields: f("15.10.2025", "Bauhaus", "AP", "89,90"),
         },
@@ -639,6 +641,19 @@ pub fn companies_model() -> Model {
     m
 }
 
+/// Your own entry with a long automatically learned spelling (badge and
+/// remove button anchored right, spelling truncated).
+pub fn companies_user_spelling_model() -> Model {
+    let mut m = companies_model();
+    if let Some(db) = m.companies.db.as_mut() {
+        db.entries[0]
+            .learned
+            .push("AMAZON EU S.A R.L. NIEDERLASSUNG DEUTSCHLAND".into());
+    }
+    m.companies.active = Some(0);
+    m
+}
+
 pub fn merge_model() -> Model {
     let mut m = companies_model();
     m.companies.merge = Some(crate::gui::pages::MergeDialog {
@@ -713,9 +728,9 @@ pub fn banners_model(tones: [Tone; 2]) -> Model {
             "Open provider settings",
         ),
         Tone::Warning => (
-            "This scan needs OCR models, which aren't installed.",
+            "This scan needs the scan reader, which isn't installed.",
             "",
-            "Download OCR models",
+            "Download scan reader",
         ),
         Tone::Success => ("Undid 10 renames.", "", ""),
         _ => (
@@ -743,10 +758,27 @@ pub fn valid_edit_model() -> Model {
     m
 }
 
-/// Bauhaus (vision, warning) selected: detail shows lower sections.
+/// Bauhaus (vision, warning) selected: details panel shows lower sections.
 pub fn warning_detail_model() -> Model {
-    let mut m = preview_model();
+    let mut m = preview_details_model();
     m.active = Some(3);
+    m
+}
+
+/// Saved privacy offline: header shows the passive Offline badge (§4.1).
+pub fn offline_preview_model() -> Model {
+    let mut m = preview_model();
+    if let Some(s) = m.config.settings.as_mut() {
+        s.privacy = autorename_core::config::Privacy::Offline;
+    }
+    m.stamp_current();
+    m
+}
+
+/// Preview with the opt-in details panel open (§3, §4.4).
+pub fn preview_details_model() -> Model {
+    let mut m = preview_model();
+    m.detail_visible = true;
     m
 }
 

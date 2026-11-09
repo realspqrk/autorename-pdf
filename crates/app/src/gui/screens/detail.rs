@@ -136,7 +136,8 @@ fn body(ui: &mut Ui, m: &Model, i: usize, row: &Row, acts: &mut Vec<Action>) {
         .or_else(|| row.item.as_ref()?.error.as_ref())
     {
         section(ui, "Problem", |ui| {
-            icon_line(ui, Tone::Danger, &model::error_copy(e), w);
+            let headline = row.error_summary().unwrap_or_else(|| model::error_copy(e));
+            icon_line(ui, Tone::Danger, &headline, w);
             ui.add_space(space::XS);
             wrapped_label(ui, &e.message, typ::CAPTION, p.text_muted, w);
             if let Some(h) = &e.hint {

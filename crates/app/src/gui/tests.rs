@@ -56,9 +56,16 @@ fn screens() -> Vec<Screen> {
         ("empty_offline", demo::offline_setup_model),
         ("empty_configured", demo::configured_empty_model),
         ("preview", demo::preview_model),
+        ("preview_details", demo::preview_details_model),
+        ("preview_offline", demo::offline_preview_model),
         ("progress", demo::progress_model),
         ("renaming", demo::renaming_model),
         ("done", demo::done_model),
+        ("done_details", || {
+            let mut m = demo::done_model();
+            m.detail_visible = true;
+            m
+        }),
         ("partial", demo::partial_model),
         ("edit_invalid", demo::invalid_edit_model),
         ("edit_valid", demo::valid_edit_model),
@@ -76,6 +83,10 @@ fn screens() -> Vec<Screen> {
         ("settings_naming", || demo::settings_model(page::NAMING)),
         ("settings_about", || demo::settings_model(page::ABOUT)),
         ("companies_review", demo::companies_model),
+        (
+            "companies_user_spelling",
+            demo::companies_user_spelling_model,
+        ),
         ("companies_merge", demo::merge_model),
         ("history", demo::history_model),
     ]
@@ -349,13 +360,23 @@ fn measured_geometry_all_interactive_nodes() {
     );
 }
 
-/// Pane geometry: φ split ±1, header 48, toolbar 40, action bar 56, progress
+/// Pane geometry: list full width with the details panel closed (default),
+/// φ split ±1 when open; header 48, toolbar 40, action bar 56, progress
 /// confined to the list (checklist 2, report items 4/10).
 #[test]
 fn layout_regions_and_phi_split() {
     let _gpu = gpu_lock();
     for size in SIZES {
         let h = harness(demo::preview_model, size, false);
+        let row = h
+            .get_by_label_contains("scan_0041.pdf, will be renamed to")
+            .rect();
+        assert_eq!(
+            (row.left(), row.width()),
+            (0.0, size.0),
+            "closed: full width"
+        );
+        let h = harness(demo::preview_details_model, size, false);
         let detail = theme::detail_width(size.0);
         let row = h
             .get_by_label_contains("scan_0041.pdf, will be renamed to")
@@ -371,7 +392,15 @@ fn layout_regions_and_phi_split() {
         assert_eq!(size.0 - rename.right(), theme::space::LG);
         let tab = h.get_by_role_and_label(Role::Tab, "Rename").rect();
         assert_eq!(tab.center().y, theme::size::HEADER / 2.0);
-        let h = harness(demo::progress_model, size, false);
+        let h = harness(
+            || {
+                let mut m = demo::progress_model();
+                m.detail_visible = true;
+                m
+            },
+            size,
+            false,
+        );
         let p = h.get_by_role(Role::ProgressIndicator).rect();
         assert_eq!(p.left(), 0.0);
         assert!(
@@ -386,7 +415,7 @@ fn layout_regions_and_phi_split() {
 #[test]
 fn accessibility_labels() {
     let _gpu = gpu_lock();
-    let h = harness(demo::preview_model, SIZES[0], false);
+    let h = harness(demo::preview_details_model, SIZES[0], false);
     let row = h.get_by_label_contains(
         "scan_0041.pdf, will be renamed to 20251103 Amazon AP 12,13.pdf, text extraction, metadata will be written, included",
     );
@@ -401,18 +430,18 @@ fn accessibility_labels() {
         .label()
         .unwrap_or_default();
     assert!(excl.ends_with("excluded"), "{excl}");
-    h.get_by_label("Privacy: cloud, OpenAI gpt-6-luna. Open privacy settings");
     h.get_by_label("Copy original path");
     h.get_by_label("Edit proposed name");
-    h.get_by_label("Profile: Business");
     h.get_by_label_contains("Company match section, expanded");
+    h.get_by_label("Hide details");
+    h.get_by_label("Try again broken.pdf");
 }
 
 /// Tab order header → toolbar → list → detail → action bar; one row stop.
 #[test]
 fn keyboard_tab_order_and_enter_on_rename() {
     let _gpu = gpu_lock();
-    let mut h = harness(demo::preview_model, SIZES[0], false);
+    let mut h = harness(demo::preview_details_model, SIZES[0], false);
     let order = tab_to(&mut h, |l| l == "Rename 10 files");
     let pos = |needle: &str| {
         order
@@ -420,16 +449,16 @@ fn keyboard_tab_order_and_enter_on_rename() {
             .position(|l| l.contains(needle))
             .unwrap_or_else(|| panic!("{needle} not in tab order {order:#?}"))
     };
-    let (header, settings, search, row, copy, rename) = (
+    let (header, settings, toolbar, row, copy, rename) = (
         pos("Rename"),
         pos("Settings"),
-        pos("Search files"),
+        pos("Add files…"),
         pos("will be renamed to"),
         pos("Copy original path"),
         pos("Rename 10 files"),
     );
     assert!(
-        header < settings && settings < search && search < row && row < copy && copy < rename,
+        header < settings && settings < toolbar && toolbar < row && row < copy && copy < rename,
         "{order:#?}"
     );
     assert_eq!(
@@ -457,6 +486,13 @@ fn keyboard_only_flow_from_first_run() {
     }
     h.run();
     assert_eq!(h.state().m.setup.api_key, "sk-test");
+    // Your company (business profile): optional, after the key.
+    tab_to(&mut h, |l| l == "Your company (optional)");
+    for c in "ACME GmbH".chars() {
+        h.event(egui::Event::Text(c.to_string()));
+    }
+    h.run();
+    assert_eq!(h.state().m.setup.company, "ACME GmbH");
     tab_to(&mut h, |l| l == "Save and continue");
     h.key_press(Key::Enter);
     h.run();
@@ -503,6 +539,34 @@ fn keyboard_only_flow_from_first_run() {
     assert!(h.state().m.undone);
 }
 
+/// Setup card on disk: Save and continue writes the starter config with
+/// provider, key reference and your company (comment-preserving edit), the
+/// key into `.env`; the company is pre-filled from an existing config.
+#[test]
+fn setup_save_writes_config_with_company() {
+    use super::model::ConfigState;
+    use super::screens::Action;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.yaml");
+    let mut m = Model::new(ConfigState::load(Some(&path), false));
+    m.setup.provider = 1; // Anthropic
+    m.setup.api_key = "sk-ant-test".into();
+    m.setup.company = "ACME \"Nord\" GmbH".into();
+    let (mut app, ctx) = bare_app(m);
+    app.act(&ctx, Action::SaveSetup);
+    assert_eq!(app.m.setup.error, None);
+    let s = app.m.config.settings.as_ref().expect("config valid");
+    assert_eq!(s.company_name, "ACME \"Nord\" GmbH");
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("${ANTHROPIC_API_KEY}"), "{text}");
+    assert!(text.contains("# YOUR company"), "comments kept");
+    let env = std::fs::read_to_string(dir.path().join(".env")).unwrap();
+    assert!(env.contains("ANTHROPIC_API_KEY="), "{env}");
+    // Pre-fill from an existing config.
+    let m = Model::new(ConfigState::load(Some(&path), false));
+    assert_eq!(m.setup.company, "ACME \"Nord\" GmbH");
+}
+
 /// Ctrl+Enter only triggers the visible, enabled primary of the current
 /// tab: never a hidden Rename behind Settings or during an inline edit.
 #[test]
@@ -540,7 +604,9 @@ fn retry_failed_after_partial() {
     let mut h = harness(demo::partial_model, SIZES[0], false);
     let targets = h.state().m.retry_targets().len();
     assert!(targets >= 2);
-    h.get_by_label_contains("Retry failed").click();
+    // 2 failed + 1 not reached: the label counts the actual targets.
+    h.get_by_label(&format!("Try remaining {targets} files"))
+        .click();
     h.run();
     assert!(h.state().m.report.is_none());
     assert_eq!(h.state().m.rows.len(), targets);
@@ -705,28 +771,6 @@ fn offline_blocks_cloud_tests_and_model_downloads() {
     app.act(&ctx, Action::ModelFetch(id));
     assert!(app.m.settings.model_busy.is_none());
     assert!(matches!(&app.m.settings.model_msg, Some(Err(e)) if e == super::app::DOWNLOAD_BLOCKED));
-}
-
-/// Changing the profile makes every result stale (fingerprint) and
-/// re-analyzes the whole plan with that profile: one plan never mixes
-/// profiles.
-#[test]
-fn profile_change_rebinds_plan_settings() {
-    use super::screens::Action;
-    let mut m = demo::preview_model();
-    m.demo = false;
-    let (mut app, ctx) = bare_app(m);
-    app.act(&ctx, Action::SelectProfile("academic".into()));
-    let m = &app.m;
-    assert_eq!(
-        m.meta.as_ref().map(|x| x.profile.as_str()),
-        Some("academic")
-    );
-    assert_eq!(m.run_fp, m.current_fp(), "run uses the current profile");
-    assert_eq!(m.rows.len(), 12);
-    assert!(m.rows.iter().all(|r| r.item.is_none()), "rows re-queued");
-    assert_eq!(total(&app), 12);
-    app.act(&ctx, Action::Stop);
 }
 
 /// Settings can't be saved (privacy/provider change) under a running job.
@@ -1343,6 +1387,7 @@ fn empty_screen_recommends_the_scan_reader() {
 /// About: license line, View license dialog, support links, imprint.
 #[test]
 fn about_license_dialog_and_support_links() {
+    use super::pages::TextDoc;
     use super::screens::settings::{IMPRINT, LICENSE_LINE};
     let _gpu = gpu_lock();
     let mut h = harness(|| demo::settings_model(page::ABOUT), SIZES[0], false);
@@ -1353,15 +1398,67 @@ fn about_license_dialog_and_support_links() {
     assert!(!IMPRINT.contains('+'), "no phone number");
     h.get_by_label("View license").click();
     h.run();
-    assert!(h.state().m.license_open);
+    assert_eq!(h.state().m.doc_open, Some(TextDoc::License));
     h.key_press(Key::Escape);
     h.run();
-    assert!(!h.state().m.license_open, "Esc closes the dialog");
+    assert!(h.state().m.doc_open.is_none(), "Esc closes the dialog");
     assert_eq!(
         h.state().m.tab,
         super::model::Tab::Settings,
         "…not Settings"
     );
+}
+
+/// About › Third-party notices: the generated file in a document dialog
+/// (pre-wrapped rows, `show_rows`); Close and Esc dismiss it. Snapshot of
+/// the open dialog at 1280 × 800.
+#[test]
+fn about_third_party_notices_dialog() {
+    use super::pages::TextDoc;
+    use super::screens::settings::{NOTICES_TEXT, doc_rows, wrap_cols};
+    assert!(NOTICES_TEXT.starts_with("# Third-party notices"));
+    let w = wrap_cols("aaaa bbbb cccccccccc", 6);
+    assert_eq!(w, ["aaaa", "bbbb", "cccccc", "cccc"]);
+    let rows = doc_rows(NOTICES_TEXT, 72);
+    assert!(rows.iter().all(|(l, _)| l.chars().count() <= 72));
+    assert_eq!(
+        rows[0],
+        ("Third-party notices".to_string(), true),
+        "heading without #"
+    );
+    assert!(
+        rows.iter()
+            .all(|(l, _)| !l.starts_with("```") && !l.contains("cargo xtask notices")),
+        "no fences or generator note"
+    );
+    assert_eq!(
+        doc_rows("# T\n\n```text\nbody\n```", 72),
+        [
+            ("T".to_string(), true),
+            (String::new(), false),
+            ("body".to_string(), false)
+        ]
+    );
+    let _gpu = gpu_lock();
+    let mut results = SnapshotResults::new();
+    for dark in [false, true] {
+        let mut h = harness(|| demo::settings_model(page::ABOUT), SIZES[0], dark);
+        h.get_by_label("Third-party notices").click();
+        h.run();
+        assert_eq!(h.state().m.doc_open, Some(TextDoc::ThirdPartyNotices));
+        h.get_by_role_and_label(Role::Document, "Third-party notices");
+        results.add(h.try_snapshot(snap_name("about_notices", SIZES[0], dark)));
+        h.get_by_label("Close").click();
+        h.run();
+        assert!(h.state().m.doc_open.is_none(), "Close dismisses it");
+        h.get_by_label("Third-party notices").click();
+        h.run();
+        h.key_press(Key::Escape);
+        h.run();
+        assert!(h.state().m.doc_open.is_none(), "Esc dismisses it");
+        assert_eq!(h.state().m.tab, super::model::Tab::Settings);
+    }
+    results.unwrap();
 }
 
 /// Temp config (starter + `extra` appended / `profiles` replaced) loaded
@@ -1473,13 +1570,10 @@ fn invalid_name_format_blocks_save() {
 #[test]
 fn name_tab_follows_profile() {
     use super::model::Tab;
-    use super::screens::Action;
     let _gpu = gpu_lock();
     let mut h = harness(demo::configured_empty_model, SIZES[0], false);
-    h.get_by_role_and_label(Role::Tab, "Companies, 3 need review");
-    let ctx = h.ctx.clone();
-    h.state_mut()
-        .act(&ctx, Action::SelectProfile("academic".into()));
+    h.get_by_role_and_label(Role::Tab, "Companies, 3 need a look");
+    switch_profile(&mut h, "academic");
     h.run();
     assert!(
         h.query_by_label_contains("Companies").is_none(),
@@ -1516,7 +1610,6 @@ fn name_tab_follows_profile() {
 #[test]
 fn profile_switch_reloads_name_list() {
     use super::model::Tab;
-    use super::screens::Action;
     use autorename_core::harmonize;
     let (dir, mut m) = temp_settings(
         "profiles:\n  papers:\n    extends: academic\n    harmonize_field: journal_name\n",
@@ -1540,20 +1633,25 @@ fn profile_switch_reloads_name_list() {
         });
     h.run();
     run_until(&mut h, "Amazon list", |a| names(a) == ["Amazon"]);
-    let ctx = h.ctx.clone();
-    h.state_mut()
-        .act(&ctx, Action::SelectProfile("papers".into()));
+    switch_profile(&mut h, "papers");
     assert!(
         h.state().m.companies.loading && h.state().m.companies.db.is_none(),
         "the new list loads on the worker; the old one is gone at once"
     );
     run_until(&mut h, "NeurIPS list", |a| names(a) == ["NeurIPS"]);
     h.get_by_role_and_label(Role::Tab, "Venues");
-    h.state_mut()
-        .act(&ctx, Action::SelectProfile("academic".into()));
+    switch_profile(&mut h, "academic");
     h.run();
     assert_eq!(h.state().m.tab, Tab::Rename, "tab gone, back to Rename");
     assert!(h.state().m.companies.db.is_none());
+}
+
+/// What saving another profile in Settings does to the running app: the
+/// active profile changes, the name list follows at once.
+fn switch_profile(h: &mut Harness<'_, App>, id: &str) {
+    let a = h.state_mut();
+    a.m.config.select_profile(id);
+    a.sync_name_list();
 }
 
 fn names(a: &App) -> Vec<String> {
@@ -1607,18 +1705,366 @@ fn naming_samples_and_no_matching_caption() {
     h.get_by_label("Who checks similar company names?: Your selected AI provider");
 }
 
-/// The privacy chip opens Settings › Processing at the top.
+/// Header: no profile combo or provider chip; a passive Offline badge only
+/// when the saved privacy is offline (§4.1).
 #[test]
-fn privacy_chip_opens_processing() {
+fn header_shows_only_offline_badge() {
+    let _gpu = gpu_lock();
+    let h = harness(demo::preview_model, SIZES[0], false);
+    assert!(
+        h.query_by_label_contains("Offline").is_none(),
+        "cloud: no badge"
+    );
+    assert!(h.query_by_label_contains("Profile").is_none());
+    assert!(h.query_by_label_contains("Privacy").is_none());
+    let h = harness(demo::offline_preview_model, SIZES[0], false);
+    let b = h.get_by_label("Offline. Documents stay on this computer");
+    assert_eq!(b.accesskit_node().role(), Role::Label);
+}
+
+/// The details panel is opt-in (§3): hidden by default, a toggle in the
+/// header (Rename with a plan or result) and Ctrl+\ show/hide it, selecting a row
+/// never opens it, and the state is the one the app persists.
+#[test]
+fn details_toggle_shows_and_hides_panel() {
     use super::model::Tab;
     let _gpu = gpu_lock();
     let mut h = harness(demo::preview_model, SIZES[0], false);
-    h.get_by_label("Privacy: cloud, OpenAI gpt-6-luna. Open privacy settings")
+    let toggled = |h: &Harness<'_, App>, l: &str| h.get_by_label(l).accesskit_node().toggled();
+    assert!(!h.state().m.detail_visible);
+    assert!(
+        h.query_by_label("Copy original path").is_none(),
+        "hidden by default"
+    );
+    assert_eq!(
+        toggled(&h, "Show details"),
+        Some(egui::accesskit::Toggled::False)
+    );
+    h.get_by_label_contains("scan_0041.pdf, will be renamed")
         .click();
     h.run();
-    assert_eq!(h.state().m.tab, Tab::Settings);
-    assert_eq!(h.state().m.settings.section, page::PROCESSING);
-    h.get_by_label("Privacy mode");
+    assert!(
+        h.query_by_label("Copy original path").is_none(),
+        "row click keeps it closed"
+    );
+    h.get_by_label("Show details").click();
+    h.run();
+    assert!(h.state().m.detail_visible);
+    h.get_by_label("Copy original path");
+    assert_eq!(
+        toggled(&h, "Hide details"),
+        Some(egui::accesskit::Toggled::True)
+    );
+    h.get_by_label("Hide details").click();
+    h.run();
+    assert!(!h.state().m.detail_visible);
+    assert!(h.query_by_label("Copy original path").is_none());
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Backslash);
+    h.run();
+    assert!(h.state().m.detail_visible, "Ctrl+\\ toggles");
+    // Rename tab only: Companies keeps its action pane, no toggle; Ctrl+\
+    // does nothing there.
+    h.state_mut().m.tab = Tab::Companies;
+    h.run();
+    assert!(h.query_by_label_contains("details").is_none());
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Backslash);
+    h.run();
+    assert!(h.state().m.detail_visible);
+    h.state_mut().m.tab = Tab::Rename;
+    h.run();
+    // Persisted with the window state (eframe storage).
+    let mut st = MemStorage::default();
+    eframe::App::save(h.state_mut(), &mut st);
+    assert_eq!(st.0.get("detail_visible").map(String::as_str), Some("true"));
+    // Companies: the action pane is always there.
+    let h = harness(demo::companies_model, SIZES[0], false);
+    h.get_by_label("Keep as new company");
+    // Empty Rename: no toggle; Done: toggle in the header.
+    let h = harness(demo::configured_empty_model, SIZES[0], false);
+    assert!(h.query_by_label_contains("details").is_none());
+    let h = harness(demo::done_model, SIZES[0], false);
+    h.get_by_label("Show details");
+}
+
+#[derive(Default)]
+struct MemStorage(std::collections::HashMap<String, String>);
+
+impl eframe::Storage for MemStorage {
+    fn get_string(&self, key: &str) -> Option<String> {
+        self.0.get(key).cloned()
+    }
+    fn set_string(&mut self, key: &str, value: String) {
+        self.0.insert(key.to_string(), value);
+    }
+    fn remove_string(&mut self, key: &str) {
+        self.0.remove(key);
+    }
+    fn flush(&mut self) {}
+}
+
+/// Toolbar: plain summary; the filter shows only while rows need a look
+/// and resets to All once none do (§4.3).
+#[test]
+fn toolbar_filter_only_while_rows_need_a_look() {
+    use super::model::Filter;
+    use super::screens::preview::summary_text;
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    let c = h.state().m.counts();
+    let k = c.review + c.errors;
+    assert!(k > 1);
+    assert_eq!(
+        summary_text(&h.state().m),
+        format!("{} files · {k} need a look", c.total)
+    );
+    assert!(
+        h.query_by_label_contains("Search").is_none(),
+        "no search box"
+    );
+    h.get_by_label(&format!("Needs a look {k}")).click();
+    h.run();
+    assert_eq!(h.state().m.filter, Filter::NeedsLook);
+    assert_eq!(h.state().m.visible().len(), k);
+    for r in &mut h.state_mut().m.rows {
+        if let Some(it) = r.item.as_mut() {
+            it.warnings.clear();
+            it.learn = None;
+            it.error = None;
+            it.status = autorename_core::pipeline::PlanStatus::Rename;
+        }
+        r.edited = None;
+    }
+    h.run();
+    assert_eq!(
+        h.state().m.filter,
+        Filter::All,
+        "reset when none need a look"
+    );
+    assert!(h.query_by_label_contains("Needs a look").is_none());
+    assert_eq!(summary_text(&h.state().m), format!("{} files", c.total));
+}
+
+/// A filter change never leaves the active row (details, Tab stop, row
+/// shortcuts) hidden; Delete then removes the visible active row.
+#[test]
+fn filter_change_keeps_active_row_visible() {
+    use super::model::Filter;
+    use super::screens::Action;
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    h.state_mut().m.active = Some(0); // a ready row
+    let ctx = h.ctx.clone();
+    h.state_mut()
+        .act(&ctx, Action::SetFilter(Filter::NeedsLook));
+    h.run();
+    let m = &h.state().m;
+    let a = m.active.expect("a visible row is active");
+    assert!(m.visible().contains(&a), "active row {a} is hidden");
+    let (name, total) = (m.rows[a].source.clone(), m.rows.len());
+    h.key_press(Key::Delete);
+    h.run();
+    let m = &h.state().m;
+    assert_eq!(m.rows.len(), total - 1);
+    assert!(
+        m.rows.iter().all(|r| r.source != name),
+        "the visible row was removed"
+    );
+}
+
+/// Renaming from "Needs a look": the Done list shows every result again
+/// (filter back to All, a visible row active).
+#[test]
+fn apply_report_resets_filter() {
+    use super::model::Filter;
+    let mut m = demo::preview_model();
+    m.filter = Filter::NeedsLook;
+    let rep = demo::simulate_apply(&m);
+    m.apply_report(rep);
+    assert_eq!(m.filter, Filter::All);
+    assert_eq!(m.visible().len(), m.rows.len());
+    assert!(m.active.is_some_and(|a| m.visible().contains(&a)));
+}
+
+/// Done counts only review entries the batch really created (EntryAdded,
+/// renamed or unchanged), once per name; result rows show apply-time
+/// problems and plain rename failures.
+#[test]
+fn done_counts_and_result_problems_follow_the_report() {
+    use autorename_core::pipeline::{ErrorInfo, LearnAction, LearnStatus, RenameStatus};
+    let mut m = demo::preview_model();
+    let rep = demo::simulate_apply(&m);
+    m.apply_report(rep);
+    let base = m.review_entries();
+    // One new company in three files: added, added (unchanged file),
+    // learning failed.
+    for (k, status) in [
+        (0, LearnStatus::EntryAdded),
+        (3, LearnStatus::EntryAdded),
+        (4, LearnStatus::Failed),
+    ] {
+        let r = &mut m.rows[k];
+        r.item.as_mut().unwrap().learn = Some(LearnAction::NewEntry {
+            name: "Zeta GmbH".into(),
+            review: true,
+        });
+        let f = r.report.as_mut().unwrap();
+        f.learn_status = status;
+        if k == 3 {
+            f.rename_status = RenameStatus::Unchanged;
+        }
+    }
+    assert_eq!(
+        m.review_entries(),
+        base + 1,
+        "deduplicated; failed not counted"
+    );
+    // Clean analysis, metadata write failed at apply time.
+    m.rows[0].item.as_mut().unwrap().warnings.clear();
+    m.rows[0].report.as_mut().unwrap().warnings = vec!["Enrichment failed: locked".into()];
+    assert_eq!(
+        m.rows[0].problem("company").as_deref(),
+        Some("Renamed, but the document details couldn't be saved in it.")
+    );
+    // Rename failure: cause-specific line 1, no old analysis warning.
+    let f = m.rows[3].report.as_mut().unwrap();
+    f.rename_status = RenameStatus::Failed;
+    f.error = Some(ErrorInfo {
+        code: "io_error".into(),
+        message: "x.pdf: The process cannot access the file because it is being used by another process. (os error 32)".into(),
+        hint: None,
+        retryable: true,
+    });
+    assert_eq!(
+        m.rows[3].error_summary().as_deref(),
+        Some("File is open in another program. Close it and try again")
+    );
+    assert!(m.rows[3].problem("company").is_none());
+}
+
+/// The details toggle keeps its identity while its label flips: Enter on
+/// the focused toggle opens and closes the panel.
+#[test]
+fn details_toggle_keeps_focus() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    tab_to(&mut h, |l| l == "Show details");
+    h.key_press(Key::Enter);
+    h.run();
+    assert!(h.state().m.detail_visible);
+    assert_eq!(
+        focused_label(&h),
+        "Hide details",
+        "focus stays on the toggle"
+    );
+    h.key_press(Key::Enter);
+    h.run();
+    assert!(!h.state().m.detail_visible);
+    assert_eq!(focused_label(&h), "Show details");
+}
+
+/// Provenance filters split by entry source, never overlapping: your own
+/// entry with a learned spelling is only under "Added by you".
+#[test]
+fn company_provenance_filters_do_not_overlap() {
+    use super::pages::CompanyFilter;
+    let m = demo::companies_user_spelling_model();
+    let mut c = m.companies;
+    let amazon = 0;
+    c.filter = CompanyFilter::Learned;
+    assert!(!c.visible().contains(&amazon), "not 'Added automatically'");
+    let auto = c.visible();
+    c.filter = CompanyFilter::Manual;
+    assert!(c.visible().contains(&amazon));
+    assert!(c.visible().iter().all(|i| !auto.contains(i)), "no overlap");
+}
+
+/// Core warning strings become one plain sentence (§4.3); unknown text
+/// falls back to the raw sentence.
+#[test]
+fn plain_warning_maps_core_strings() {
+    use super::model::plain_warning;
+    for (raw, plain) in [
+        (
+            "currency_missing: no currency found for the amount \"54,99\"; please review",
+            "No currency was found. Check the amount.",
+        ),
+        (
+            "direction_uncertain: cannot tell whether \"ACME\" issued or received this document",
+            "It's unclear whether you sent or received this. Check the type.",
+        ),
+        (
+            "direction_uncertain: the model named \"ACME\" (your own company) as the counterparty and issuer/recipient do not resolve it (issuer \"\", recipient \"\"); please review",
+            "Your own company was read as the other party. Check the company and type.",
+        ),
+        (
+            "Enrichment failed: file is locked",
+            "Renamed, but the document details couldn't be saved in it.",
+        ),
+        (
+            "Company not learned: list is locked",
+            "Renamed, but the company couldn't be added to your list.",
+        ),
+        (
+            "durability_warning: x not flushed to disk: busy",
+            "Renamed, but saving wasn't fully confirmed. Check the file.",
+        ),
+        (
+            "counterparty_missing: no counterparty company found; please review",
+            "No company name was found. Check the company.",
+        ),
+        (
+            "visual_scan_incomplete: page 2: Unknown; counted as a page with pictures",
+            "Some pages couldn't be checked fully. Check the name.",
+        ),
+        (
+            "ocr_models_missing: OCR models are not installed",
+            "This scan needs the scan reader, which isn't installed.",
+        ),
+        (
+            "ocr_unavailable: built without OCR",
+            "Text recognition wasn't available. Check the name.",
+        ),
+        (
+            "Could not open PDF: FileError",
+            "The PDF couldn't be opened. Check the file.",
+        ),
+        (
+            "Could not extract text from page 3: bad font",
+            "Some text couldn't be read. Check the name.",
+        ),
+        (
+            "Could not render page 1: out of memory",
+            "A page couldn't be read. Check the name.",
+        ),
+        (
+            "OCR failed on page 2: model error",
+            "A page couldn't be read. Check the name.",
+        ),
+        (
+            "OCR returned no text",
+            "No text was recognized in the scan. Check the name.",
+        ),
+        (
+            "Company decider failed: timeout",
+            "The company couldn't be checked against your list. Check the name.",
+        ),
+        ("something new happened", "Something new happened"),
+    ] {
+        assert_eq!(plain_warning(raw), plain, "{raw}");
+    }
+    // Permission errors say which operation failed.
+    use super::model::{error_copy, rename_error_copy};
+    let denied = autorename_core::pipeline::ErrorInfo {
+        code: "io_error".into(),
+        message: "a.pdf: Permission denied (os error 13)".into(),
+        hint: None,
+        retryable: false,
+    };
+    assert_eq!(error_copy(&denied), "Can't open this file (no permission)");
+    assert_eq!(
+        rename_error_copy(&denied),
+        "No permission to change this file"
+    );
 }
 
 // ---------------------------------------------------------------------------

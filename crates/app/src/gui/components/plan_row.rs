@@ -1,9 +1,8 @@
 //! §4.3 PlanRow: 56 h, padding 8/16, checkbox · status icon · two filename
-//! lines · right cluster (tier, metadata, learning badges). One AccessKit ListItem.
+//! lines · Try again on errors. No badges. One AccessKit ListItem.
 
 use egui::{Rect, Response, Sense, Ui, WidgetInfo};
 
-use super::badge::Badge;
 use super::button::{BSize, Button};
 use super::{
     anim, ellipsize_end, ellipsize_middle, focus_ring, mix, paint_checkbox, paint_icon,
@@ -51,7 +50,6 @@ pub struct RowView<'a> {
     pub checkable: bool,
     pub selected: bool,
     pub edited: bool,
-    pub badges: Vec<Badge<'a>>,
     pub retry: bool,
     pub read_only: bool,
     /// Only the active row is in the Tab order; arrows move between rows.
@@ -190,20 +188,10 @@ impl PlanRow {
             ),
         }
 
-        // Right cluster (anchored at right − 16): badges, then Retry.
+        // Right edge (right − 16): Try again on retryable errors.
         let mut right = rect.right() - space::LG;
-        for b in v.badges.iter().rev() {
-            let w = b.width(ui);
-            let r = Rect::from_min_size(
-                egui::pos2(right - w, l1y - size::BADGE / 2.0),
-                theme::v2(w, size::BADGE),
-            );
-            b.paint_at(ui, r);
-            right = r.left() - space::XS;
-        }
-        right -= space::MD - space::XS;
         if v.retry {
-            let b = Button::ghost("Retry")
+            let b = Button::ghost("Try again")
                 .icon(theme::icon::ROTATE_CCW)
                 .size(BSize::Sm);
             let w = b.width(ui);
@@ -214,12 +202,12 @@ impl PlanRow {
                 ),
                 theme::v2(w, size::CONTROL_SM),
             );
-            let a = format!("Retry {}", v.old_name);
+            let a = format!("Try again {}", v.old_name);
             out.retry = b.a11y(a).show_at(ui, r).clicked();
             right = r.left() - space::MD;
         }
 
-        // Line 1: up to the badge cluster; filenames use a middle ellipsis.
+        // Line 1: up to Try again; filenames use a middle ellipsis.
         let x = rect.left() + TEXT_X;
         let mut max_w = (right - x).max(0.0);
         if v.edited {

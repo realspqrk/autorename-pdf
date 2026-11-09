@@ -9,6 +9,13 @@ use autorename_core::ocr::PackStatus;
 
 use super::model::{ConfigState, KeySource, PROVIDERS};
 
+/// Long text shown from About in the document dialog (§4.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TextDoc {
+    License,
+    ThirdPartyNotices,
+}
+
 /// Settings pages (left nav, §4.7).
 pub const SETTINGS_PAGES: [&str; 4] = ["General", "Processing", "Naming", "About"];
 pub mod page {
@@ -235,7 +242,7 @@ impl SettingsForm {
     }
 
     pub fn key_var(&self) -> &'static str {
-        PROVIDERS[self.provider.min(4)].2
+        super::model::key_var(PROVIDERS[self.provider.min(4)].0)
     }
 
     /// After the provider changed (to `self.provider`): its default model,
@@ -600,8 +607,6 @@ pub struct SettingsState {
     pub date_custom: bool,
     /// Naming › Language shows the free-text field (view state).
     pub language_other: bool,
-    /// Scroll the page to the top on the next frame (privacy chip).
-    pub scroll_top: bool,
     pub form: SettingsForm,
     pub saved: SettingsForm,
     pub loaded: bool,
@@ -714,7 +719,7 @@ impl CompaniesState {
             .filter(|(_, e)| match self.filter {
                 CompanyFilter::All => true,
                 CompanyFilter::Review => e.review,
-                CompanyFilter::Learned => e.source == Source::Auto || !e.learned.is_empty(),
+                CompanyFilter::Learned => e.source == Source::Auto,
                 CompanyFilter::Manual => e.source == Source::User,
             })
             .filter(|(_, e)| {
@@ -745,14 +750,21 @@ impl CompaniesState {
     }
 }
 
+/// "No other spellings" / "1 other spelling" / "4 other spellings".
+pub fn spellings_caption(e: &Entry) -> String {
+    match e.aliases.len() + e.learned.len() {
+        0 => "No other spellings".to_string(),
+        n => super::components::plural(n, "other spelling", "other spellings"),
+    }
+}
+
 pub fn entry_caption(e: &Entry) -> String {
-    let n = e.aliases.len() + e.learned.len();
-    let mut s = super::components::plural(n, "alias", "aliases");
+    let mut s = spellings_caption(e);
     match (&e.added, e.source) {
-        (Some(d), Source::Auto) => s.push_str(&format!(" · learned {d}")),
-        (Some(d), Source::User) => s.push_str(&format!(" · added {d}")),
-        (None, Source::User) => s.push_str(" · hand-written"),
-        (None, Source::Auto) => s.push_str(" · learned"),
+        (Some(d), Source::Auto) => s.push_str(&format!(" · added automatically {d}")),
+        (Some(d), Source::User) => s.push_str(&format!(" · added by you {d}")),
+        (None, Source::User) => s.push_str(" · added by you"),
+        (None, Source::Auto) => s.push_str(" · added automatically"),
     }
     s
 }

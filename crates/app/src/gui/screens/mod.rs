@@ -29,15 +29,15 @@ pub enum Action {
     SwitchTab(Tab),
     /// Gear: open Settings, or close it back to the previous tab.
     ToggleSettings,
-    /// Open Settings on a page (`pages::page::*`), scrolled to the top.
-    OpenSettings(usize),
-    ShowLicense,
+    /// About: show the license or the third-party notices dialog.
+    ShowDoc(super::pages::TextDoc),
     OpenUrl(String),
     /// Leave Settings for the tab that was active before it.
     CloseSettings,
     SaveSetup,
-    SelectProfile(String),
     SetFilter(Filter),
+    /// Show/hide the details panel (toolbar toggle, Ctrl+\).
+    ToggleDetails,
     Activate(usize),
     Toggle(usize),
     StartEdit(usize),

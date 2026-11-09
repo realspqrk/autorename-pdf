@@ -5,26 +5,23 @@ use egui::{Rect, Ui};
 use super::Action;
 use crate::gui::components::plan_row::{PlanRow, RowStatus, RowView, TEXT_X};
 use crate::gui::components::{
-    Badge, Button, Field, Progress, galley, in_rect, paint_card, paint_galley_v, paint_icon,
-    paint_text, plural, segmented,
+    Button, Field, Progress, galley, in_rect, paint_card, paint_galley_v, paint_icon, paint_text,
+    plural, segmented,
 };
-use crate::gui::model::{
-    self, Filter, LearnStatusExt, Model, Phase, Row, enrich_label, tier_label,
-};
+use crate::gui::model::{self, Filter, Model, Phase, Row};
 use crate::gui::theme::{self, Tone, size, space, stroke, typ};
-use autorename_core::pipeline::{LearnAction, RenameStatus};
+use autorename_core::pipeline::RenameStatus;
 
+/// "12 files · 2 need a look" (§4.3; the second part only when K > 0).
 pub fn summary_text(m: &Model) -> String {
     let c = m.counts();
-    let mut parts = vec![plural(c.total, "file", "files")];
-    parts.push(format!("{} ready", c.ready));
-    if c.review > 0 {
-        parts.push(format!("{} need review", c.review));
+    let mut s = plural(c.total, "file", "files");
+    match c.needs_look() {
+        0 => {}
+        1 => s.push_str(" · 1 needs a look"),
+        k => s.push_str(&format!(" · {k} need a look")),
     }
-    if c.errors > 0 {
-        parts.push(plural(c.errors, "error", "errors"));
-    }
-    parts.join(" · ")
+    s
 }
 
 pub fn analysis_text(m: &Model) -> Option<String> {
@@ -48,7 +45,7 @@ pub fn eta_copy(secs: f32) -> String {
 }
 
 /// `list_w`: width of the list pane (progress spans only the list, §4.5).
-pub fn toolbar(ui: &mut Ui, rect: Rect, list_w: f32, m: &mut Model, acts: &mut Vec<Action>) {
+pub fn toolbar(ui: &mut Ui, rect: Rect, list_w: f32, m: &Model, acts: &mut Vec<Action>) {
     let p = theme::palette(ui);
     ui.painter().rect_filled(rect, 0, p.bg);
     ui.painter().hline(
@@ -74,25 +71,20 @@ pub fn toolbar(ui: &mut Ui, rect: Rect, list_w: f32, m: &mut Model, acts: &mut V
             if add.clicked() {
                 acts.push(Action::ChooseFiles);
             }
-            Field::new("Search files", &mut m.search)
-                .hint("Search")
-                .width(size::SEARCH_W)
-                .id(egui::Id::unique("search"))
-                .show(ui);
+            right_edge = add.rect.left();
+            // Filter only while something needs a look (§4.3).
             let c = m.counts();
-            let opts = [
-                format!("All {}", c.total),
-                format!("Ready {}", c.ready),
-                format!("Review {}", c.review),
-                format!("Errors {}", c.errors),
-            ];
-            let filters = [Filter::All, Filter::Ready, Filter::Review, Filter::Errors];
-            let mut sel = filters.iter().position(|f| *f == m.filter).unwrap_or(0);
-            let r = segmented(ui, "Filter", &opts, &mut sel);
-            if filters[sel] != m.filter {
-                acts.push(Action::SetFilter(filters[sel]));
+            let k = c.needs_look();
+            if k > 0 {
+                let opts = [format!("All {}", c.total), format!("Needs a look {k}")];
+                let filters = [Filter::All, Filter::NeedsLook];
+                let mut sel = filters.iter().position(|f| *f == m.filter).unwrap_or(0);
+                let r = segmented(ui, "Filter", &opts, &mut sel);
+                if filters[sel] != m.filter {
+                    acts.push(Action::SetFilter(filters[sel]));
+                }
+                right_edge = r.rect.left();
             }
-            right_edge = r.rect.left();
         });
     });
     let max_w = right_edge - inner.left() - space::MD;
@@ -124,76 +116,19 @@ pub fn row_view<'a>(
     line1: &'a str,
     warn: Option<&'a str>,
 ) -> RowView<'a> {
-    let st = r.status();
-    let mut badges = Vec::new();
+    // No badges in rows (§4.3): tier, metadata and name matching live in
+    // the details panel.
     let done = r.report.is_some();
-    let new_entry = format!("New {}", m.name_nouns().0);
-    if let Some(it) = &r.item
-        && st != RowStatus::Error
-    {
-        if let Some(t) = tier_label(it.tier) {
-            let icon = match t {
-                "OCR" => theme::icon::SCAN_TEXT,
-                "Vision" => theme::icon::IMAGE,
-                _ => theme::icon::FILE_TEXT,
-            };
-            badges.push(Badge::new(Tone::Neutral, t).icon(icon));
-        }
-        let (en, will) = match (&r.report, &it.enrich) {
-            (Some(rep), _) => {
-                if rep.enrich_status == "enriched" {
-                    ("Metadata", true)
-                } else {
-                    ("Metadata skipped", false)
-                }
-            }
-            (None, e) => enrich_label(e),
-        };
-        badges.push(
-            Badge::new(if will { Tone::Accent } else { Tone::Neutral }, en)
-                .icon(theme::icon::FILE_PEN_LINE),
-        );
-        match (&r.report, &it.learn, r.dont_learn) {
-            // Company review stays visible after renaming (independent of
-            // the rename result).
-            (Some(_), Some(LearnAction::NewEntry { review: true, .. }), false) => {
-                badges.push(Badge::new(Tone::Warning, "Review").icon(theme::icon::FLAG))
-            }
-            (Some(rep), _, _) => {
-                if let Some((t, tone, icon)) = rep.learn_status.badge() {
-                    let t = if t == "New company" {
-                        new_entry.clone()
-                    } else {
-                        t.into()
-                    };
-                    badges.push(Badge::new(tone, t).icon(icon));
-                }
-            }
-            (None, Some(LearnAction::AddAlias { .. }), false) => {
-                badges.push(Badge::new(Tone::Accent, "Alias added").icon(theme::icon::LINK))
-            }
-            (None, Some(LearnAction::NewEntry { review: true, .. }), false) => {
-                badges.push(Badge::new(Tone::Warning, "Review").icon(theme::icon::FLAG))
-            }
-            (None, Some(LearnAction::NewEntry { .. }), false) => badges
-                .push(Badge::new(Tone::Accent, new_entry.clone()).icon(theme::icon::USER_PLUS)),
-            _ => {}
-        }
-        if !r.checked && !done {
-            badges.push(Badge::new(Tone::Neutral, "Skipped"));
-        }
-    }
     RowView {
         id: egui::Id::unique(("row", r.source.as_path())),
         line1,
         old_name: "",
         warning: warn,
-        status: st,
+        status: r.status(),
         checked: r.checked,
         checkable: r.checkable(),
         selected: m.active == Some(i),
         edited: r.edited.is_some(),
-        badges,
         retry: m.retryable(i) && !m.busy(),
         read_only: done,
         focusable: m.active == Some(i),
@@ -277,7 +212,7 @@ pub fn list(
                     let r = &m.rows[i];
                     let line1 = line1_for(r);
                     let old = r.old_name();
-                    let warn = r.first_warning();
+                    let warn = r.problem(&m.name_nouns().0);
                     let mut v = row_view(m, i, r, &line1, warn.as_deref());
                     v.old_name = &old;
                     let out = PlanRow::show(ui, rr, v);
@@ -328,10 +263,12 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
         };
         let fid = egui::Id::unique("inline_edit");
         let helper = format!("from {old} · Enter to save, Esc to cancel");
+        // The error keeps the way out visible (§4.3).
+        let shown_err = err.as_ref().map(|e| format!("{e} · Esc to cancel"));
         let resp = Field::new("Edit proposed name", text)
             .mono()
             .suffix(".pdf")
-            .error(err.as_deref())
+            .error(shown_err.as_deref())
             .helper(Some(&helper))
             .id(fid)
             .show(ui)
@@ -359,13 +296,14 @@ struct DoneSummary {
     icon: char,
     tone: Tone,
     title: String,
+    /// Plain caption, only non-zero parts (§4.6); may be empty.
     line: String,
 }
 
 fn done_summary(m: &Model) -> Option<DoneSummary> {
     let rep = m.report.as_ref()?;
     let s = &rep.summary;
-    let failed = s.failed;
+    let failed = failed_count(m);
     let (icon, tone) = if m.undone {
         (theme::icon::UNDO_2, Tone::Neutral)
     } else if failed > 0 || s.cancelled > 0 || s.incomplete > 0 {
@@ -378,51 +316,31 @@ fn done_summary(m: &Model) -> Option<DoneSummary> {
     } else if s.cancelled > 0 {
         format!("Stopped · renamed {} of {} files", s.renamed, s.total)
     } else if failed > 0 {
-        format!(
-            "Renamed {} of {} files · {failed} failed",
-            s.renamed, s.total
-        )
+        format!("Renamed {} of {} files", s.renamed, s.total)
     } else {
         format!("Renamed {}", plural(s.renamed, "file", "files"))
     };
-    let skipped = rep
-        .files
-        .iter()
-        .filter(|f| f.enrich_status.starts_with("skipped"))
-        .count();
-    let new_cos = rep
-        .files
-        .iter()
-        .filter(|f| f.learn_status == autorename_core::pipeline::LearnStatus::EntryAdded)
-        .count();
-    let review = m
-        .rows
-        .iter()
-        .filter(|r| {
-            r.item.as_ref().is_some_and(|i| {
-                matches!(i.learn, Some(LearnAction::NewEntry { review: true, .. }))
-            }) && r
-                .report
-                .as_ref()
-                .is_some_and(|f| f.rename_status == RenameStatus::Renamed)
-        })
-        .count();
-    let mut parts = vec![format!("{} with metadata", s.enriched)];
-    if skipped > 0 {
-        parts.push(format!("{skipped} metadata skipped"));
-    }
-    if m.name_label().is_some() {
-        let (one, many) = m.name_nouns();
-        let mut co = plural(new_cos, &format!("new {one}"), &format!("new {many}"));
-        if review > 0 {
-            co.push_str(&format!(", {review} needs review"));
+    let mut parts = Vec::new();
+    if !m.undone {
+        if failed > 0 {
+            parts.push(format!("{failed} couldn't be renamed"));
         }
-        parts.push(co);
+        if s.cancelled > 0 {
+            parts.push(plural(s.cancelled, "left as it was", "left as they were"));
+        }
+        if s.incomplete > 0 {
+            parts.push(format!("{} renamed with a problem", s.incomplete));
+        }
+        let review = m.review_entries();
+        if review > 0 && m.name_label().is_some() {
+            let (one, many) = m.name_nouns();
+            parts.push(if review == 1 {
+                format!("1 new {one} needs a look")
+            } else {
+                format!("{review} new {many} need a look")
+            });
+        }
     }
-    if s.cancelled > 0 {
-        parts.push(format!("{} not reached", s.cancelled));
-    }
-    parts.push(plural(failed, "error", "errors"));
     Some(DoneSummary {
         icon,
         tone,
@@ -431,15 +349,33 @@ fn done_summary(m: &Model) -> Option<DoneSummary> {
     })
 }
 
-/// Card height from the wrapped summary (§4.6; padding 24, gaps 8/16).
+fn failed_count(m: &Model) -> usize {
+    m.report.as_ref().map_or(0, |rep| {
+        rep.files
+            .iter()
+            .filter(|f| f.rename_status == RenameStatus::Failed)
+            .count()
+    })
+}
+
+/// Retry label from its actual targets (§4.6): failed only → "Try again
+/// (2)"; failed + not reached → "Try remaining 3 files".
+fn retry_label(m: &Model) -> Option<String> {
+    let n = m.retry_targets().len();
+    match n {
+        0 => None,
+        n if n == failed_count(m) => Some(format!("Try again ({n})")),
+        n => Some(format!("Try remaining {}", plural(n, "file", "files"))),
+    }
+}
+
 /// Labels of the Done card's secondary actions, in order.
 fn done_actions(m: &Model) -> Vec<String> {
     let mut v = vec!["Undo rename".to_string(), "Open folder".into()];
-    let n = m.retry_targets().len();
-    if n > 0 {
-        v.push(format!("Retry failed ({n})"));
+    if let Some(l) = retry_label(m) {
+        v.push(l);
     }
-    if m.name_label().is_some() {
+    if m.review_entries() > 0 && m.name_label().is_some() {
         v.push(format!("Review {}", m.name_nouns().1));
     }
     v
@@ -461,20 +397,30 @@ fn action_rows(ui: &Ui, m: &Model, inner_w: f32) -> usize {
     rows
 }
 
+/// Card height from the wrapped summary (§4.6; padding 24, gaps 8/16).
 pub fn done_card_h(ui: &Ui, m: &Model, width: f32) -> f32 {
     let inner_w = width - space::XL * 2.0;
-    let lines = done_summary(m).map_or(1, |d| {
-        crate::gui::components::part_lines(ui, &d.line, typ::BODY, inner_w).len()
-    });
+    let lines = done_summary(m).map_or(0, |d| caption_lines(ui, &d.line, inner_w).len());
     let rows = action_rows(ui, m, inner_w) as f32;
+    let caption = if lines > 0 {
+        space::SM + typ::BODY.line * lines as f32
+    } else {
+        0.0
+    };
     space::XL
         + typ::HEADLINE.line
-        + space::SM
-        + typ::BODY.line * lines as f32
+        + caption
         + space::LG
         + size::CONTROL * rows
         + space::SM * (rows - 1.0)
         + space::XL
+}
+
+fn caption_lines(ui: &Ui, line: &str, width: f32) -> Vec<String> {
+    if line.is_empty() {
+        return Vec::new();
+    }
+    crate::gui::components::part_lines(ui, line, typ::BODY, width)
 }
 
 fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
@@ -501,10 +447,7 @@ fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
         crate::gui::components::ellipsize_end(ui, &d.title, typ::HEADLINE, inner.right() - tx);
     paint_galley_v(ui, tx, cy, galley(ui, &title, typ::HEADLINE), p.text);
     let top = inner.top() + typ::HEADLINE.line + space::SM;
-    for (k, l) in crate::gui::components::part_lines(ui, &d.line, typ::BODY, inner.width())
-        .iter()
-        .enumerate()
-    {
+    for (k, l) in caption_lines(ui, &d.line, inner.width()).iter().enumerate() {
         let cy = top + typ::BODY.line * (k as f32 + 0.5);
         paint_text(ui, inner.left(), cy, l, typ::BODY, p.text_muted);
     }
@@ -536,9 +479,10 @@ fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
             {
                 acts.push(Action::OpenFolder);
             }
+            let labels = done_actions(m);
             let n = m.retry_targets().len();
             if n > 0
-                && Button::secondary(&done_actions(m)[2])
+                && Button::secondary(&labels[2])
                     .icon(theme::icon::ROTATE_CCW)
                     .enabled(!m.busy())
                     .tooltip("Analyzes the failed and not-reached files again in a new plan; renamed files stay renamed")
@@ -547,8 +491,8 @@ fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
             {
                 acts.push(Action::RetryFailed);
             }
-            if m.name_label().is_some()
-                && Button::secondary(&format!("Review {}", m.name_nouns().1))
+            if let Some(l) = labels.get(if n > 0 { 3 } else { 2 })
+                && Button::secondary(l)
                     .icon(theme::icon::BUILDING_2)
                     .show(ui)
                     .clicked()

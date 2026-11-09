@@ -32,9 +32,15 @@ pub struct Button<'a> {
     muted: bool,
     min_w: Option<f32>,
     salt: Option<egui::Id>,
+    /// Fixed widget id for `show_at` (a label that changes, e.g. a
+    /// toggle, must not change the id or focus is lost).
+    id: Option<egui::Id>,
     /// Toggle-style button that is currently on (e.g. the Settings gear
     /// while Settings is open): tab-active treatment, AccessKit pressed.
     active: bool,
+    /// Two-state toggle (e.g. the details panel): AccessKit always reports
+    /// the pressed state, on or off.
+    toggle: bool,
 }
 
 impl<'a> Button<'a> {
@@ -51,7 +57,9 @@ impl<'a> Button<'a> {
             muted: false,
             min_w: None,
             salt: None,
+            id: None,
             active: false,
+            toggle: false,
         }
     }
 
@@ -107,10 +115,21 @@ impl<'a> Button<'a> {
         self.active = on;
         self
     }
+    /// Toggle button: `active` look while on, pressed state for AccessKit.
+    pub fn toggle(mut self, on: bool) -> Self {
+        self.active = on;
+        self.toggle = true;
+        self
+    }
 
     /// Disambiguates `show_at` ids when the same label repeats in one ui.
     pub fn salt(mut self, s: impl std::hash::Hash + std::fmt::Debug) -> Self {
         self.salt = Some(egui::Id::unique(s));
+        self
+    }
+
+    pub fn id(mut self, id: egui::Id) -> Self {
+        self.id = Some(id);
         self
     }
 
@@ -166,7 +185,8 @@ impl<'a> Button<'a> {
         // Does not advance the parent layout (caller owns the geometry).
         let key = self.a11y.clone().unwrap_or_else(|| self.label.to_string());
         let base = self.salt.unwrap_or_else(|| ui.scope_id());
-        let resp = ui.interact(rect, base.with(("button", key)), self.sense());
+        let id = self.id.unwrap_or_else(|| base.with(("button", key)));
+        let resp = ui.interact(rect, id, self.sense());
         self.paint(ui, rect, resp)
     }
 
@@ -291,9 +311,10 @@ impl<'a> Button<'a> {
         let label = self.a11y.clone().unwrap_or_else(|| self.label.to_string());
         let enabled = self.enabled;
         let active = self.active;
+        let toggle = self.toggle;
         resp.widget_info(|| {
-            if active {
-                WidgetInfo::selected(egui::Role::Button, enabled, true, &label)
+            if active || toggle {
+                WidgetInfo::selected(egui::Role::Button, enabled, active, &label)
             } else {
                 WidgetInfo::labeled(egui::Role::Button, enabled, &label)
             }
