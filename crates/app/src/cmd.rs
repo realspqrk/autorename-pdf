@@ -93,7 +93,7 @@ pub(crate) fn models_hint(out: &Out, offline: bool, pack: &ocr::Pack) -> String 
         )
     } else {
         format!(
-            "Run `{}` (~{} MB), or disable OCR (pdf.ocr: false).",
+            "Run `{}` (~{} MB) to read scans on this computer; until then they use AI image reading when it is on.",
             out.command(&["models", "fetch", pack.id]),
             pack.total_size().div_ceil(1_000_000)
         )
@@ -115,7 +115,7 @@ fn scope_models_hint<'a>(
 ) {
     for w in warnings {
         if w.starts_with("ocr_models_missing:") && !w.ends_with(hint) {
-            w.push(' ');
+            w.push_str(if w.ends_with('.') { " " } else { ". " });
             w.push_str(hint);
         }
     }
@@ -297,11 +297,20 @@ fn rename(a: &RenameArgs, ctx: &Ctx<'_>) -> Result<ExitCode> {
                 fsx::write_new(path, bytes.as_bytes())
             };
             written.map_err(|e| Error::io(path, e))?;
-            out.note(&format!(
-                "Plan written to {} (run `{}`).",
-                path.display(),
-                out.command(&["apply", &path.to_string_lossy()])
-            ));
+            let p = path.to_string_lossy();
+            out.note(&if plan.summary.rename == 0 && plan.summary.failed > 0 {
+                format!(
+                    "Plan written to {} with nothing to rename; fix the errors above, then run `{}` again.",
+                    path.display(),
+                    out.command(&["rename", "--force", "--plan", &p, "..."])
+                )
+            } else {
+                format!(
+                    "Plan written to {} (run `{}`).",
+                    path.display(),
+                    out.command(&["apply", &p])
+                )
+            });
         }
         if out.is_text() {
             print_plan(&plan, out);

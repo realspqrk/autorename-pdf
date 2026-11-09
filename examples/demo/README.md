@@ -65,12 +65,12 @@ $ autorename-pdf rename --dry-run demo
   globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf
   initech-invoice.pdf        →  20240628 Initech Solutions AP EUR 237.50.pdf
                                 page 1 sent to AI as an image
-                                ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin Run `autorename-pdf models fetch latin` (~39 MB), or disable OCR (pdf.ocr: false).
+                                ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin. Run `autorename-pdf models fetch latin` (~39 MB) to read scans on this computer; until then they use AI image reading when it is on.
   invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf
   rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf
   springfield-scan.pdf       →  20241103 Springfield Power Co AP USD 4,300.00.pdf
                                 page 1 sent to AI as an image
-                                ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin Run `autorename-pdf models fetch latin` (~39 MB), or disable OCR (pdf.ocr: false).
+                                ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin. Run `autorename-pdf models fetch latin` (~39 MB) to read scans on this computer; until then they use AI image reading when it is on.
   stark-invoice-3-pages.pdf  →  20250301 Stark Industries AP EUR 17,100.00.pdf
 Dry run: 7 to rename (nothing changed)
 ```

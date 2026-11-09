@@ -22,7 +22,7 @@ For agents asked to "set up AutoRename-PDF" for a user. Non-interactive; ask the
 4. Verify with the demo (needs the repo's `examples/demo/`): `cp -r examples/demo ./demo && $APP rename --plan plan.json demo -o json` → exit 0, `summary.total` 7 (expected names: `examples/demo/README.md`). To rename for real without paying for a second analysis: `$APP apply plan.json -o json` (to change a name, edit `items[].proposed_name` first), `$APP undo -o json` reverts.
    Isolation for tests/sandboxes: `AUTORENAME_PDF_DATA_DIR=<dir>` (journal, OCR models) + `--config <file>`.
 5. Optional: `$APP setup --integrate` (file-manager "Rename now/Preview"). Cloud mode: `$APP setup --ocr-models` (~40 MB, scans read locally); offline: see step 3.
-6. Tell the user: GUI = run `$APP` (no arguments); CLI = `$APP rename --dry-run <folder>`, then `$APP rename <folder>`, `$APP undo`.
+6. Tell the user: GUI = run `$APP` (no arguments); CLI = `$APP rename --dry-run <folder>`, then `$APP rename <folder>` (analyzes again), `$APP undo`. For your own runs use `rename --plan` + `apply` (one analysis).
 
 ## Sources of truth
 

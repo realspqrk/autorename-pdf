@@ -59,7 +59,8 @@ $ autorename-pdf rename --dry-run demo          # preview; changes nothing
   rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf
   ...
 Dry run: 7 to rename (nothing changed)
-$ autorename-pdf rename demo                    # rename for real
+$ autorename-pdf rename demo                    # rename for real (analyzes again;
+                                                # rename --plan + apply analyzes once)
 $ autorename-pdf undo                           # everything back, byte for byte
 ```
 
