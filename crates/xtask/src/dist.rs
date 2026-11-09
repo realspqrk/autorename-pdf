@@ -131,6 +131,25 @@ fn xwin_case_links(target: &str) {
 #[cfg(not(unix))]
 fn xwin_case_links(_: &str) {}
 
+/// The caller's rustflags plus `--remap-path-prefix <home>=~`: panic
+/// locations embed source paths (`strip` keeps them), so a release binary
+/// would otherwise carry the builder's user name.
+fn release_rustflags() -> String {
+    let mut flags: Vec<String> = match std::env::var("CARGO_ENCODED_RUSTFLAGS") {
+        Ok(f) if !f.is_empty() => f.split('\x1f').map(str::to_owned).collect(),
+        _ => std::env::var("RUSTFLAGS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect(),
+    };
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    if let Some(home) = home.filter(|h| !h.is_empty()) {
+        flags.push(format!("--remap-path-prefix={}=~", home.to_string_lossy()));
+    }
+    flags.join("\x1f")
+}
+
 fn build(o: &Opts, root: &Path) -> Result<PathBuf, String> {
     let cross_windows = o.windows() && !cfg!(windows);
     let mut cmd = Command::new(cargo());
@@ -143,6 +162,11 @@ fn build(o: &Opts, root: &Path) -> Result<PathBuf, String> {
     }
     cmd.args(["build", "--release", "--locked", "--target", &o.target]);
     cmd.args(["-p", "autorename-app"]);
+    if !cross_windows {
+        // cargo-xwin passes its own target rustflags, which this would
+        // override; release Windows builds are native (CI, VM).
+        cmd.env("CARGO_ENCODED_RUSTFLAGS", release_rustflags());
+    }
     if o.windows() {
         cmd.args(["-p", "autorename-winlaunch"]);
     }
@@ -311,6 +335,11 @@ fn packager_config(o: &Opts, root: &Path, stage: &Path, out: &Path) -> Result<Va
             json!({"signCommand": "cargo xtask sign %1"}),
         );
     }
+    if o.macos() {
+        // The DMG would show LICENSE as a click-through agreement on mount;
+        // the bundle ships it in Contents/Resources/licenses anyway.
+        m.remove("license-file");
+    }
     if o.sign && o.macos() {
         // cargo-packager ignores APPLE_SIGNING_IDENTITY; it signs only with
         // this config key (known.md).
@@ -401,30 +430,81 @@ pub fn run(o: &Opts) -> Result<(), String> {
     ensure_packager()?;
     let out = root.join("target/dist").join(&o.target);
     let cfg = packager_config(o, &root, &stage, &out)?;
-    let cfg_text = serde_json::to_string(&cfg).map_err(|e| e.to_string())?;
     fs::write(
         out.join("packager.json"),
         serde_json::to_string_pretty(&cfg).unwrap_or_default(),
     )
     .map_err(|e| e.to_string())?;
     let formats = o.formats.as_deref().unwrap_or(o.default_formats());
-    // Raw JSON config: relative paths in Packager.toml resolve against the
-    // repo root (cwd); a config *file* would make them relative to its dir.
-    let mut packager = Command::new(cargo());
-    if !o.windows() && !o.macos() {
-        packager.env("XDG_CACHE_HOME", appimage_tools(&root, &out)?);
+    remove_old_packages(&out)?;
+    // One packager run per distinct package version (pre-releases differ
+    // per format, see `format_version`).
+    let mut groups: Vec<(String, Vec<&str>)> = Vec::new();
+    for f in formats.split(',') {
+        let v = format_version(f, cfg["version"].as_str().unwrap_or_default());
+        match groups.iter_mut().find(|(gv, _)| *gv == v) {
+            Some((_, fs)) => fs.push(f),
+            None => groups.push((v, vec![f])),
+        }
     }
-    exec(
-        packager
-            .current_dir(&root)
-            .env("APPIMAGE_EXTRACT_AND_RUN", "1")
-            .args(["packager", "--formats", formats, "--config", &cfg_text]),
-    )?;
+    for (version, fs) in groups {
+        let mut cfg = cfg.clone();
+        cfg["version"] = json!(version);
+        let cfg_text = serde_json::to_string(&cfg).map_err(|e| e.to_string())?;
+        // Raw JSON config: relative paths in Packager.toml resolve against the
+        // repo root (cwd); a config *file* would make them relative to its dir.
+        let mut packager = Command::new(cargo());
+        if !o.windows() && !o.macos() {
+            packager.env("XDG_CACHE_HOME", appimage_tools(&root, &out)?);
+        }
+        exec(
+            packager
+                .current_dir(&root)
+                .env("APPIMAGE_EXTRACT_AND_RUN", "1")
+                .args([
+                    "packager",
+                    "--formats",
+                    &fs.join(","),
+                    "--config",
+                    &cfg_text,
+                ]),
+        )?;
+    }
     rename_installer(&out)?;
     if o.sign && o.macos() {
         notarize_dmgs(&out)?;
     }
     checksums(&out)
+}
+
+/// Package version for a cargo-packager format. A semver pre-release
+/// (`4.0.0-beta.1`) must sort before the final release in each package
+/// manager: Debian reads `-` as the revision separator (`~` sorts first);
+/// pacman forbids `-` in pkgver and sorts `4.0.0beta.1` before `4.0.0`.
+fn format_version(format: &str, version: &str) -> String {
+    match (format, version.split_once('-')) {
+        ("deb", Some((core, pre))) => format!("{core}~{pre}"),
+        ("pacman", Some((core, pre))) => format!("{core}{pre}"),
+        _ => version.to_owned(),
+    }
+}
+
+/// Package files from earlier builds would end up in `SHA256SUMS`.
+fn remove_old_packages(out: &Path) -> Result<(), String> {
+    const EXT: [&str; 6] = ["AppImage", "deb", "gz", "exe", "dmg", "zip"];
+    for p in fs::read_dir(out)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+    {
+        let pkg = p.is_file()
+            && (p.file_name().is_some_and(|n| n == "PKGBUILD")
+                || p.extension().is_some_and(|x| EXT.iter().any(|e| x == *e)));
+        if pkg {
+            fs::remove_file(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// cargo-packager copies its tools from `<cache>/.cargo-packager/AppImage/`
@@ -474,6 +554,16 @@ fn rename_installer(out: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pre_releases_sort_before_the_final_in_every_package_manager() {
+        assert_eq!(format_version("deb", "4.0.0-beta.1"), "4.0.0~beta.1");
+        assert_eq!(format_version("pacman", "4.0.0-beta.1"), "4.0.0beta.1");
+        assert_eq!(format_version("appimage", "4.0.0-beta.1"), "4.0.0-beta.1");
+        for f in ["deb", "pacman", "nsis", "dmg"] {
+            assert_eq!(format_version(f, "4.0.0"), "4.0.0");
+        }
+    }
 
     #[test]
     fn packager_version_must_match_exactly() {

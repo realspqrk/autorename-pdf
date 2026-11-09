@@ -1,6 +1,6 @@
 # macOS release (build, sign, notarize)
 
-Runs on a Mac (build + DMG + tests are Mac-bound; `rcodesign` could sign/notarize from Linux but is not wired up). Steps 1–2 validated on the Mac mini 2026-11-09 (unsigned; `cargo test --workspace` green). Steps 3–5 not yet run: the first run must confirm them and update this file (and `known.md` for traps).
+Runs on a Mac (build + DMG + tests are Mac-bound; `rcodesign` could sign/notarize from Linux but is not wired up). Steps 1–4 validated on the Mac mini 2026-11-09 (4.0.0-beta.1: build, `cargo test --workspace`, signing, notarization, Gatekeeper on a quarantined copy).
 
 ## TOC
 - [1. Prerequisites](#1-prerequisites)
@@ -24,36 +24,30 @@ cargo xtask dist        # .app + .dmg in target/dist/aarch64-apple-darwin/
 Smoke test before signing: `APP=target/dist/aarch64-apple-darwin/AutoRename-PDF.app; B="$APP/Contents/MacOS/autorename-pdf"; export AUTORENAME_PDF_DATA_DIR=/tmp/arp-smoke`, then `$B --version`; `$B inspect examples/demo/acme-invoice.pdf -o json` (PDFium loads from `Contents/Resources`); `$B models fetch latin`, then `inspect examples/demo/springfield-scan.pdf` → `ocr_quality` 1.0 (ORT works). GUI: `open -n --env AUTORENAME_GUI_DEMO=1 --env AUTORENAME_PDF_DATA_DIR=/tmp/arp-smoke/gui "$APP"` from the runner, then `screencapture -x -o -l <CGWindowNumber> out.png` (window capture works from the runner; full-screen VNC does not).
 
 ## 3. Sign and notarize
-cargo-packager 0.11.8 signs only when `[macos] signing-identity` is set in the effective config; it ignores `APPLE_SIGNING_IDENTITY` and `xtask` does not forward it. It then signs + notarizes + staples the `.app`, but the `.dmg` is **only signed** (no notarize, no staple). Set the identity in a local, uncommitted `Packager.toml` copy, then:
+One command (validated 2026-11-09, both submissions Accepted in ~1–3 min each):
 ```bash
-# notarization vars from step 1 must be exported, else packager fails with MissingNotarizeAuthVars
-CI=true cargo xtask dist   # CI=true → create-dmg --skip-jenkins (no Finder AppleScript; needed when unattended)
-DMG=target/dist/aarch64-apple-darwin/<name>.dmg
-xcrun notarytool submit "$DMG" --keychain-profile <profile> --wait   # or --key/--key-id/--issuer
-xcrun stapler staple "$DMG"
+export APPLE_SIGNING_IDENTITY="Developer ID Application: Gerhard Petermeir (HCJ7D67RFZ)"
+export APPLE_KEYCHAIN_PROFILE=spqrk-notarize    # notarytool profile on the Mac mini (team HCJ7D67RFZ)
+cargo xtask dist --sign
 ```
-Regenerate `SHA256SUMS-<triple>` after stapling (the DMG bytes changed). Manual fallback (sign without packager):
-```bash
-APP="target/dist/aarch64-apple-darwin/AutoRename-PDF.app"
-find "$APP/Contents" -name '*.dylib' -exec codesign --force --timestamp --options runtime -s "$APPLE_SIGNING_IDENTITY" {} \;
-codesign --force --timestamp --options runtime -s "$APPLE_SIGNING_IDENTITY" "$APP"
-ditto -c -k --keepParent "$APP" app.zip
-xcrun notarytool submit app.zip --keychain-profile <profile> --wait
-xcrun stapler staple "$APP"
-```
-The fallback leaves the previously built DMG untouched: rebuild the DMG from the stapled `.app`, then sign, notarize and staple it as above. Sign nested dylibs (PDFium) before the bundle; never use `--deep` for signing. Over SSH the login keychain is locked (`errSecInternalComponent`): unlock it first (`security unlock-keychain`).
+xtask fails before building if either variable is missing. It passes the identity to cargo-packager as `[macos] signing-identity` (packager ignores `APPLE_SIGNING_IDENTITY` itself); packager signs every Mach-O (incl. `Contents/Resources/libpdfium.dylib`) with hardened runtime + timestamp, notarizes and staples the `.app`, then builds and signs the `.dmg`; xtask notarizes + staples the `.dmg` and writes `SHA256SUMS` last. Rejected submission: `xcrun notarytool log <id> --keychain-profile spqrk-notarize`. The DMG has no license click-through (xtask drops `license-file` for macOS; LICENSE ships in `Contents/Resources/licenses/`).
 
 ## 4. Verify
+Test what a user downloads: a quarantined copy of the DMG and the app copied out of it.
 ```bash
-codesign --verify --strict --verbose=2 "$APP"
-spctl -a -vv "$APP"                    # "accepted", source=Notarized Developer ID
-xcrun stapler validate "$DMG"
-syspolicy_check distribution "$APP"    # macOS 14+: stricter than spctl
-xcrun stapler validate "$APP"
-open "$APP"                            # opens without a Gatekeeper warning; Settings > About shows the version
-"$APP/Contents/MacOS/autorename-pdf" integrate install && "$APP/Contents/MacOS/autorename-pdf" integrate status
+D=target/dist/aarch64-apple-darwin; DMG=$(ls $D/*.dmg); T=/tmp/arp-verify; rm -rf $T; mkdir -p $T/mnt
+(cd $D && shasum -a 256 -c SHA256SUMS)
+xcrun stapler validate "$DMG"; spctl -a -t open --context context:primary-signature -vv "$DMG"   # accepted, Notarized Developer ID
+cp "$DMG" $T/d.dmg; xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" $T/d.dmg
+hdiutil attach -nobrowse -readonly -mountpoint $T/mnt $T/d.dmg && ditto $T/mnt/AutoRename-PDF.app $T/AutoRename-PDF.app && hdiutil detach $T/mnt
+xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" $T/AutoRename-PDF.app; APP=$T/AutoRename-PDF.app
+codesign --verify --strict --deep --verbose=2 "$APP"; codesign -dvv "$APP" 2>&1 | grep -E "flags|Authority=Developer|Timestamp"   # flags=0x10000(runtime)
+spctl -a -vv "$APP"; xcrun stapler validate "$APP"; syspolicy_check distribution "$APP"
+B="$APP/Contents/MacOS/autorename-pdf"; export AUTORENAME_PDF_DATA_DIR=$T/data
+$B --version && $B models fetch latin && $B inspect examples/demo/springfield-scan.pdf -o json | grep '"ocr_quality": 1'   # ORT under hardened runtime
+open --env AUTORENAME_GUI_DEMO=1 --env AUTORENAME_PDF_DATA_DIR=$T/gui "$APP"   # window appears; capture it with screencapture -o -l <CGWindowNumber> (never full screen: private desktop)
 ```
-Finder Quick Actions ("Rename now", "Preview") appear under right-click > Quick Actions; then `integrate remove`.
+Finder Quick Actions: `$B integrate install`, right-click a PDF > Quick Actions > "Rename now"/"Preview", then `$B integrate remove` (not yet validated: needs someone at the Mac).
 
 ## 5. Publish
-Add the `.dmg` and its `SHA256SUMS-<triple>` to the GitHub release ([release.md](release.md) step 5), then update README's install table (macOS row) and `followup.md` (macOS signing entry).
+Pull and attach to the draft release that CI created ([release.md](release.md) step 5): `mac.sh pull Code/autorename-pdf/target/dist/aarch64-apple-darwin/ <local>`, rename `SHA256SUMS` to `SHA256SUMS-aarch64-apple-darwin`, `gh release upload vX.Y.Z <dmg> SHA256SUMS-aarch64-apple-darwin`.

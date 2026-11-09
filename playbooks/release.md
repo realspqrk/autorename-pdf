@@ -10,7 +10,8 @@
 
 ## 1. Version bump
 - Edit `[workspace.package] version` in `Cargo.toml` (one place: every crate, the exe VERSIONINFO, and cargo-packager read it).
-- `cargo check --workspace` to refresh `Cargo.lock`. Then commit as `Bump version to X.Y.Z`.
+- `cargo check --workspace` to refresh `Cargo.lock`; the Settings > About snapshots show the version: `UPDATE_SNAPSHOTS=1 cargo test -p autorename-app --bin autorename-pdf gui::tests::snapshots`. Then commit as `Bump version to X.Y.Z`.
+- Pre-release: `X.Y.Z-beta.N` (semver), tag `vX.Y.Z-beta.N`. CI marks a tag with `-` as GitHub pre-release (never "Latest"). Package versions are mapped per format so the final release sorts after the beta (`dist.rs::format_version`): deb `X.Y.Z~beta.N`, pacman `X.Y.Zbeta.N`; NSIS/VERSIONINFO use `X.Y.Z.0`. While a beta is out, the README install table and AGENTS.md runbook name the beta tag (`gh release download` without a tag fetches the latest stable).
 
 ## 2. Gates
 ```bash
@@ -26,14 +27,14 @@ AWS_LC_SYS_PREBUILT_NASM=1 CARGO_TARGET_DIR=target/xwin \
 
 ## 3. Build packages per OS
 `cargo xtask dist [--target <triple>] [--formats a,b] [--no-package] [--sign]` does all of this:
-it fetches PDFium, builds release with `--locked`, stages binaries, natives and licenses in `target/dist/<triple>/stage/`, runs cargo-packager 0.11.8 (it installs that version when missing), and writes `SHA256SUMS`.
+it fetches PDFium, builds release with `--locked` and `--remap-path-prefix <home>=~` (no builder paths in the binary; not for cross-built Windows), stages binaries, natives and licenses in `target/dist/<triple>/stage/`, deletes older package files there, runs cargo-packager 0.11.8 (it installs that version when missing), and writes `SHA256SUMS`. Check: `strings <binary> | grep -c "$HOME"` must print 0.
 
 | OS (build host) | Command | Output in `target/dist/<triple>/` |
 |---|---|---|
-| Linux x86_64 | `cargo xtask dist` | `.AppImage`, `.deb`, pacman `.tar.gz` + `PKGBUILD` |
+| Linux x86_64 (release: CI on ubuntu-22.04 = glibc floor for Ubuntu 22.04+/Arch) | `cargo xtask dist` | `.AppImage`, `.deb`, pacman `.tar.gz` + `PKGBUILD` |
 | Windows x64 (Windows host) | `cargo xtask dist --sign` | `AutoRename-PDF_X.Y.Z_x64-setup.exe` (NSIS, per user) |
 | Windows from Linux (unsigned test build) | `cargo xtask dist --target x86_64-pc-windows-msvc` | needs `makensis` (`nsis` package) and `cargo-xwin` |
-| macOS arm64 | `cargo xtask dist` | `.app`, `.dmg`; signing + notarization: [macos-release.md](macos-release.md) |
+| macOS arm64 (Mac mini) | `cargo xtask dist --sign` | `.app`, notarized + stapled `.dmg`: [macos-release.md](macos-release.md) |
 
 - AppImage: cargo-packager downloads linuxdeploy from GitHub, and the build sets `APPIMAGE_EXTRACT_AND_RUN=1` (works without FUSE).
 - Pacman: the output is a source tarball plus a PKGBUILD. Install it with `makepkg -si` in a directory that holds both files.

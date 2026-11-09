@@ -43,7 +43,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Oldest supported glibc: packages built here run on Ubuntu
+          # 22.04+ and current Arch; a newer builder would raise the floor.
+          - os: ubuntu-22.04
             triple: x86_64-unknown-linux-gnu
           - os: windows-latest
             triple: x86_64-pc-windows-msvc
@@ -108,8 +110,57 @@ jobs:
             target/dist/${{ matrix.triple }}/PKGBUILD
             target/dist/${{ matrix.triple }}/SHA256SUMS-*
 
+  # Install the real Linux packages on the target distros and run them:
+  # CLI, PDFium (text PDF) and ONNX Runtime OCR (scanned PDF).
+  smoke-linux:
+    needs: dist
+    name: smoke (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ubuntu-22.04 deb+AppImage, os: ubuntu-22.04, container: "" }
+          - { name: ubuntu-24.04 deb+AppImage, os: ubuntu-24.04, container: "" }
+          - { name: arch pacman, os: ubuntu-latest, container: "archlinux:latest" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-x86_64-unknown-linux-gnu
+          path: dist
+      - name: Install (Ubuntu .deb)
+        if: matrix.container == ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ./dist/*.deb
+          chmod +x dist/*.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./dist/*.AppImage --version
+      - name: Install (Arch pacman, makepkg)
+        if: matrix.container != ''
+        run: |
+          pacman -Syu --noconfirm --needed base-devel
+          useradd -m builder
+          cp dist/PKGBUILD dist/*.tar.gz /home/builder/
+          chown -R builder /home/builder
+          su builder -c 'cd ~ && makepkg --noconfirm'
+          pacman -U --noconfirm $(ls /home/builder/*.pkg.tar.zst | grep -v -- '-debug-')
+      - name: Run
+        shell: bash
+        env:
+          AUTORENAME_PDF_DATA_DIR: ${{ runner.temp }}/arp
+        run: |
+          set -euo pipefail
+          autorename-pdf --version
+          autorename-pdf inspect examples/demo/acme-invoice.pdf -o json | tee text.json
+          grep -q '"chars": [1-9]' text.json
+          autorename-pdf models fetch latin
+          autorename-pdf inspect examples/demo/springfield-scan.pdf -o json | tee scan.json
+          grep -q '"ocr_quality": 1' scan.json
+
   publish:
-    needs: [version, dist]
+    needs: [version, dist, smoke-linux]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
@@ -120,4 +171,8 @@ jobs:
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --draft --generate-notes --repo "${GITHUB_REPOSITORY}"
+        # vX.Y.Z-beta.N etc. -> GitHub pre-release (never "Latest").
+        run: |
+          pre=""
+          case "${GITHUB_REF_NAME}" in *-*) pre="--prerelease" ;; esac
+          gh release create "${GITHUB_REF_NAME}" dist/* --draft $pre --generate-notes --repo "${GITHUB_REPOSITORY}"

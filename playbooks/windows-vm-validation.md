@@ -23,7 +23,7 @@ Uses the Omarchy Windows VM. Drive it with the `windows-vm` skill: `vm.sh` is in
 ```bash
 vm.sh up            # the user approves polkit; keep RDP open (Explorer and the GUI need a desktop)
 vm.sh runner        # once per VM session: the user pastes the printed line into an admin PowerShell
-vm.sh push target/dist/x86_64-pc-windows-msvc/AutoRename-PDF_4.0.0_x64-setup.exe   # host ~/Windows = guest \\host.lan\Data
+vm.sh push target/dist/x86_64-pc-windows-msvc/AutoRename-PDF_<version>_x64-setup.exe   # host ~/Windows = guest \\host.lan\Data
 vm.sh run 'Copy-Item \\host.lan\Data\AutoRename-PDF_*-setup.exe $env:TEMP\'     # never execute from UNC
 ```
 Each block in steps 3-7 runs as one `vm.sh run '...'` job (PowerShell 5.1).
@@ -38,7 +38,7 @@ If either check fails, re-copy the runner (`vm.sh runner`) and have the user res
 ## 3. Install
 a) Installer (silent, per user, no UAC):
 ```powershell
-& "$env:TEMP\AutoRename-PDF_4.0.0_x64-setup.exe" /S ; Start-Sleep 5
+& "$env:TEMP\AutoRename-PDF_<version>_x64-setup.exe" /S ; Start-Sleep 5
 Test-Path "$env:LOCALAPPDATA\Programs\AutoRename-PDF\autorename-pdf.exe","$env:LOCALAPPDATA\Programs\AutoRename-PDF\autorename-pdf-gui.exe","$env:LOCALAPPDATA\Programs\AutoRename-PDF\pdfium.dll"
 Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter "AutoRename-PDF*.lnk"
 ```

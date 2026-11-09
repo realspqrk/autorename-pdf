@@ -38,17 +38,21 @@ pub fn search_dirs() -> Vec<PathBuf> {
     if let Some(d) = std::env::var_os(PDFIUM_DIR_ENV).filter(|d| !d.is_empty()) {
         dirs.push(PathBuf::from(d));
     }
-    if let Some(d) = std::env::current_exe()
+    let exe_dir = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-    {
-        dirs.push(d);
+        .and_then(|p| p.parent().map(Path::to_path_buf));
+    if let Some(d) = &exe_dir {
+        dirs.push(d.clone());
     }
-    if let Some(t) = host_triple() {
-        // crates/core -> workspace root
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let root = manifest.ancestors().nth(2).unwrap_or(manifest);
-        dirs.push(root.join("vendor").join("pdfium").join(t));
+    // Source checkout: `<repo>/vendor/pdfium/<triple>` above `target/…/<exe>`
+    // (found at run time; a compile-time path would ship the builder's home).
+    if let (Some(d), Some(t)) = (&exe_dir, host_triple())
+        && let Some(v) = d
+            .ancestors()
+            .map(|a| a.join("vendor").join("pdfium").join(t))
+            .find(|v| v.is_dir())
+    {
+        dirs.push(v);
     }
     dirs
 }

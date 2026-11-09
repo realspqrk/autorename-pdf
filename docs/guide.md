@@ -15,8 +15,8 @@ Background for the [README](../README.md). Command options and side effects are 
 | System | Notes |
 |---|---|
 | Windows | Per-user install to `%LOCALAPPDATA%\Programs\AutoRename-PDF`, no admin prompt. Adds the Start menu entry, the Explorer context menu and `autorename-pdf` on your user `PATH` (new terminals; otherwise `"%LOCALAPPDATA%\Programs\AutoRename-PDF\autorename-pdf.exe"`). Uninstall (Settings > Apps) removes only those; your settings, name lists and undo history stay in `%APPDATA%\autorename-pdf` and `%LOCALAPPDATA%\autorename-pdf`. |
-| Linux | `integrate install` adds the menu entry, "Rename now" and "Preview in AutoRename-PDF" for Nautilus (Scripts submenu), Dolphin, Nemo and Thunar, and an `autorename-pdf` link in `~/.local/bin`. `integrate remove` deletes exactly those entries. |
-| macOS (Apple silicon) | Build from source ([README › Development](../README.md#development)); `integrate install` adds Finder Quick Actions. |
+| Linux | `integrate install` adds the menu entry, "Rename now" and "Preview in AutoRename-PDF" for Nautilus (Scripts submenu), Dolphin, Nemo and Thunar, and an `autorename-pdf` link in `~/.local/bin`. `integrate remove` deletes exactly those entries. Uninstall a package with `autorename-pdf integrate remove`, then `sudo apt remove auto-rename-pdf` (Ubuntu/Debian) or `sudo pacman -R auto-rename-pdf` (Arch). The AppImage is a single file: run `integrate remove` with it, then delete it. |
+| macOS (Apple silicon) | Drag the app from the DMG into Applications. The command line is inside the app: `/Applications/AutoRename-PDF.app/Contents/MacOS/autorename-pdf` (`integrate install` adds Finder Quick Actions; not yet tested in the beta). Uninstall: `integrate remove`, then move the app to the Trash. |
 
 ### AppImage without FUSE
 

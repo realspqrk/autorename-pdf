@@ -3,7 +3,7 @@
   <p><b>Rename PDFs from their content with AI and local OCR.</b><br>
   <code>acme-invoice.pdf</code> → <code>20240315 ACME Corporation AP EUR 4,258.80.pdf</code></p>
   <p>
-    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/realspqrk/autorename-pdf" alt="GitHub Release"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/realspqrk/autorename-pdf?include_prereleases" alt="GitHub Release"></a>
     <a href="https://github.com/realspqrk/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/realspqrk/autorename-pdf" alt="MIT License"></a>
     <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/downloads/realspqrk/autorename-pdf/total" alt="Downloads"></a>
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue" alt="Platform: Windows, Linux, macOS">
@@ -12,6 +12,8 @@
 
 Drop in invoices, letters and scans; get files named by date, company, document type and amount. AutoRename-PDF reads each PDF, asks an AI model (OpenAI, Anthropic, Gemini, xAI, or a local Ollama model) what it is, renames the file, and keeps the extracted data inside the PDF. Every change can be undone.
 
+> **4.0 is in beta.** Version 4 is a rewrite: one app with a window and a command line for Windows, macOS and Linux, plus local OCR for scans. Download **[4.0.0-beta.1](https://github.com/realspqrk/autorename-pdf/releases/tag/v4.0.0-beta.1)**; the last stable release is [3.2.0](https://github.com/realspqrk/autorename-pdf/releases/tag/v3.2.0). Coming from 3.x? Read the [migration guide](docs/migration-3-to-4.md) first. Found a problem? [Open an issue](https://github.com/realspqrk/autorename-pdf/issues).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/gui-preview-dark.png">
   <img src="docs/images/gui-preview-light.png" alt="AutoRename-PDF: a list of PDFs with the proposed new name for each, and a Rename button">
@@ -19,15 +21,15 @@ Drop in invoices, letters and scans; get files named by date, company, document 
 
 ## Install
 
-Download from [Releases](https://github.com/realspqrk/autorename-pdf/releases). Each package contains the app window and the `autorename-pdf` command.
+Download from the [4.0.0-beta.1 release](https://github.com/realspqrk/autorename-pdf/releases/tag/v4.0.0-beta.1). Each package contains the app window and the `autorename-pdf` command. `SHA256SUMS-<platform>` files list the checksums.
 
-| System | Download | Install |
+| System | File | Install |
 |---|---|---|
-| Windows 10/11 | [Download for Windows](https://github.com/realspqrk/autorename-pdf/releases/latest) (`AutoRename-PDF_<ver>_x64-setup.exe`) | On the release page, choose the file ending in `_x64-setup.exe`. Double-click it; no admin rights needed. When it's installed, open AutoRename-PDF from the Start menu. |
-| Linux (any distro) | `autorename-pdf_<ver>_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
-| Debian / Ubuntu | `autorename-pdf_<ver>_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
-| Arch | `autorename-pdf_<ver>_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
-| macOS (Apple silicon) | build from source | See [Development](#development). |
+| Windows 10/11 (x64) | `AutoRename-PDF_4.0.0-beta.1_x64-setup.exe` | Double-click it; no admin rights needed. Then open AutoRename-PDF from the Start menu. |
+| macOS 11+ (Apple silicon) | `AutoRename-PDF_4.0.0-beta.1_aarch64.dmg` | Open it and drag AutoRename-PDF into Applications. Signed and notarized by Apple. |
+| Linux (x86_64, any distro) | `autorename-pdf_4.0.0-beta.1_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
+| Ubuntu 22.04+ / Debian | `autorename-pdf_4.0.0.beta.1_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
+| Arch / Omarchy | `autorename-pdf_4.0.0beta.1_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
 
 On Linux, run `integrate install` once for the menu entry and the right-click entries: `./autorename-pdf_*.AppImage integrate install` (AppImage) or `autorename-pdf integrate install`. Install details (uninstall, AppImage without FUSE): [docs/guide.md](docs/guide.md#install-details).
 
@@ -131,6 +133,14 @@ Every key with its default: [config.yaml.example](config.yaml.example). Ready-ma
 - Rename in two steps: `rename --plan plan.json <paths>` → show the user the names → `apply plan.json`; `undo` reverts.
 - Always `-o json`; stdout carries only data, exit codes are listed in `--help`. Claude Code users: the repo ships a `/rename-pdfs` skill.
 
+## Beta status
+
+Tested for this beta: Windows 11 (installer, Explorer menu, command line), macOS 26 on Apple silicon (app, command line, OCR), Ubuntu 22.04 and 24.04 and Arch (packages, command line, OCR). Known limits:
+
+- macOS: Apple silicon only. The Finder Quick Actions (`integrate install`) are not tested yet.
+- Linux: x86_64 only. On Windows 11 the right-click entries are under "Show more options".
+- The window, settings and file formats may still change before 4.0.0.
+
 ## Documentation
 
 | Topic | Where |
@@ -150,10 +160,10 @@ cargo xtask fetch-natives                     # pinned PDFium into vendor/ (once
 cargo run -p autorename-app -- rename --dry-run examples/demo
 AUTORENAME_GUI_DEMO=1 cargo run -p autorename-app -- gui     # demo data, no disk or network
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
-cargo build --release -p autorename-app      # macOS: target/release/autorename-pdf
+cargo build --release -p autorename-app      # target/release/autorename-pdf
 ```
 
-macOS: Apple silicon only. Release and packaging: [playbooks/release.md](playbooks/release.md). Issues and forks are welcome; pull requests are not being accepted right now.
+Release and packaging: [playbooks/release.md](playbooks/release.md). Issues and forks are welcome; pull requests are not being accepted right now.
 
 ## Support
 
