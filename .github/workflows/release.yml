@@ -52,8 +52,9 @@ jobs:
             triple: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     env:
-      # Signing is on only when the Azure secrets exist (Windows).
-      SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && matrix.os == 'windows-latest' }}
+      # Signing is on only when the Azure secrets exist (Windows). Not named
+      # SIGN: linuxdeploy's AppImage plugin GPG-signs when SIGN is non-empty.
+      WIN_SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -70,7 +71,7 @@ jobs:
       # Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET.
       # metadata.json (endpoint, account, certificate profile) is in the repo.
       - name: Install Azure Trusted Signing client (dlib)
-        if: env.SIGN == 'true'
+        if: env.WIN_SIGN == 'true'
         shell: pwsh
         run: |
           nuget install Microsoft.Trusted.Signing.Client -OutputDirectory "$env:RUNNER_TEMP\ats" -ExcludeVersion
@@ -93,7 +94,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
-          if ($env:SIGN -eq 'true') { cargo xtask dist --sign } else { cargo xtask dist }
+          if ($env:WIN_SIGN -eq 'true') { cargo xtask dist --sign } else { cargo xtask dist }
 
       - name: Name checksums per target
         shell: bash
