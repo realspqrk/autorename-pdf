@@ -136,15 +136,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ./dist/*.deb
           chmod +x dist/*.AppImage
-          APPIMAGE_EXTRACT_AND_RUN=1 ./dist/*.AppImage --version
+          appimage=$(ls dist/*.AppImage)
+          # Same checks for the AppImage (its own PDFium; no FUSE on runners).
+          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --version
+          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" inspect examples/demo/acme-invoice.pdf -o json | grep -q '"chars": [1-9]'
       - name: Install (Arch pacman, makepkg)
         if: matrix.container != ''
         run: |
-          pacman -Syu --noconfirm --needed base-devel
+          pacman -Syu --noconfirm --needed base-devel sudo
           useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
           cp dist/PKGBUILD dist/*.tar.gz /home/builder/
           chown -R builder /home/builder
-          su builder -c 'cd ~ && makepkg --noconfirm'
+          # --syncdeps installs the PKGBUILD's depends (makepkg refuses root).
+          su builder -c 'cd ~ && makepkg --syncdeps --noconfirm'
           pacman -U --noconfirm $(ls /home/builder/*.pkg.tar.zst | grep -v -- '-debug-')
       - name: Run
         shell: bash

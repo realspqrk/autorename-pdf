@@ -361,8 +361,9 @@ fn checksums(out: &Path) -> Result<(), String> {
         .map(|e| e.path())
         .filter(|p| {
             p.is_file()
-                && p.file_name()
-                    .is_some_and(|n| n != "SHA256SUMS" && n != "packager.json")
+                && p.file_name().is_some_and(|n| {
+                    !n.to_string_lossy().starts_with("SHA256SUMS") && n != "packager.json"
+                })
         })
         .collect();
     entries.sort();
@@ -489,7 +490,7 @@ fn format_version(format: &str, version: &str) -> String {
     }
 }
 
-/// Package files from earlier builds would end up in `SHA256SUMS`.
+/// Package files and manifests from earlier builds would end up in `SHA256SUMS`.
 fn remove_old_packages(out: &Path) -> Result<(), String> {
     const EXT: [&str; 6] = ["AppImage", "deb", "gz", "exe", "dmg", "zip"];
     for p in fs::read_dir(out)
@@ -498,7 +499,9 @@ fn remove_old_packages(out: &Path) -> Result<(), String> {
         .map(|e| e.path())
     {
         let pkg = p.is_file()
-            && (p.file_name().is_some_and(|n| n == "PKGBUILD")
+            && (p
+                .file_name()
+                .is_some_and(|n| n == "PKGBUILD" || n.to_string_lossy().starts_with("SHA256SUMS"))
                 || p.extension().is_some_and(|x| EXT.iter().any(|e| x == *e)));
         if pkg {
             fs::remove_file(&p).map_err(|e| format!("{}: {e}", p.display()))?;
