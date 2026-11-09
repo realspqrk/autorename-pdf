@@ -43,6 +43,7 @@ hdiutil attach -nobrowse -readonly -mountpoint $T/mnt $T/d.dmg && ditto $T/mnt/A
 xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" $T/AutoRename-PDF.app; APP=$T/AutoRename-PDF.app
 codesign --verify --strict --deep --verbose=2 "$APP"; codesign -dvv "$APP" 2>&1 | grep -E "flags|Authority=Developer|Timestamp"   # flags=0x10000(runtime)
 spctl -a -vv "$APP"; xcrun stapler validate "$APP"; syspolicy_check distribution "$APP"
+xattr -d com.apple.quarantine "$APP"   # else the first exec waits at _dyld_start for the "downloaded from the Internet" dialog on the Mac's screen (expected for notarized apps; spctl above already gave Gatekeeper's verdict)
 B="$APP/Contents/MacOS/autorename-pdf"; export AUTORENAME_PDF_DATA_DIR=$T/data
 $B --version && $B models fetch latin && $B inspect examples/demo/springfield-scan.pdf -o json | grep '"ocr_quality": 1'   # ORT under hardened runtime
 open --env AUTORENAME_GUI_DEMO=1 --env AUTORENAME_PDF_DATA_DIR=$T/gui "$APP"   # window appears; capture it with screencapture -o -l <CGWindowNumber> (never full screen: private desktop)
