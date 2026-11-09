@@ -63,7 +63,7 @@ jobs:
         run: |
           cargo xtask fetch-natives
           cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo test --workspace --locked -- --skip gui::tests
+          cargo test --workspace --locked --no-fail-fast -- --skip gui::tests
 
       # --- Windows signing (Azure Trusted Signing), placeholders -------------
       # Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET.

@@ -66,15 +66,12 @@ Then:
 3. `signtool verify /pa /v` on `autorename-pdf.exe`, `autorename-pdf-gui.exe`, `uninstall.exe` (from the install dir) and the setup exe.
 
 ## 5. Verify, checksums, publish
-1. Run `sha256sum -c SHA256SUMS` in each `target/dist/<triple>/`.
-2. Windows: follow [windows-vm-validation.md](windows-vm-validation.md) (install, context menu, CLI smoke, uninstall).
-3. Linux: smoke-test the AppImage (above). `autorename-pdf integrate install && autorename-pdf integrate status && autorename-pdf integrate remove` must leave nothing behind.
-4. Create the GitHub release (CI `release.yml` does the same as a draft). Rename each manifest per triple first so the names don't collide:
-   ```bash
-   for d in target/dist/*/; do t=$(basename "$d"); mv "$d/SHA256SUMS" "$d/SHA256SUMS-$t"; done
-   gh release create vX.Y.Z --draft $(ls target/dist/*/*.{exe,AppImage,deb,tar.gz,dmg} target/dist/*/PKGBUILD target/dist/*/SHA256SUMS-* 2>/dev/null)
-   ```
-   Step 1's `sha256sum -c` must run before the rename (or use `sha256sum -c SHA256SUMS-<triple>`).
+Flow used for 4.0.0-beta.1 (CI builds Linux; signed Windows comes from the VM, macOS from the Mac mini):
+1. PR to `main` → `ci.yml` green (fmt, clippy + tests on Linux and Windows, licenses). A run with zero jobs and "workflow file issue" can be a GitHub internal error (see the run page annotation): `gh run rerun <id>`.
+2. Signed builds in parallel: Windows VM (step 4, then [windows-vm-validation.md](windows-vm-validation.md) steps 2-7) and Mac ([macos-release.md](macos-release.md) steps 3-4). Copy the Windows setup exe + `SHA256SUMS` to the host via `\\host.lan\Data`; `mac.sh pull` the DMG + `SHA256SUMS`. `sha256sum -c` each.
+3. Merge the PR (fast-forward), tag `vX.Y.Z[-beta.N]` on the merge commit, push the tag. `release.yml`: version check, license gates, Linux (ubuntu-22.04) + unsigned Windows packages, `smoke-linux` (Ubuntu 22.04/24.04 deb + AppImage, Arch pacman: CLI + PDFium + OCR), then a draft release (pre-release for `-` tags) with `--generate-notes`.
+4. Replace the unsigned Windows assets and add macOS: rename each manifest to `SHA256SUMS-<triple>`, then `gh release upload vX.Y.Z <setup.exe> SHA256SUMS-x86_64-pc-windows-msvc <dmg> SHA256SUMS-aarch64-apple-darwin --clobber`.
+5. Check the draft: asset names (GitHub may rewrite special characters; the README install table names exact files), one `SHA256SUMS-*` per platform, download one asset and `sha256sum -c`. Set the notes (`gh release edit --notes-file`), then publish: `gh release edit vX.Y.Z --draft=false` (pre-releases keep `--prerelease`).
 
 ## What is where
 | Item | Path |

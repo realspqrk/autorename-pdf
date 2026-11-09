@@ -85,6 +85,8 @@ EXIT CODES:
 #[derive(Debug, Parser)]
 #[command(
     name = "autorename-pdf",
+    // Usage line without `.exe` on Windows (clap takes argv[0] otherwise).
+    bin_name = "autorename-pdf",
     version,
     about = ABOUT,
     long_about = LONG_ABOUT,

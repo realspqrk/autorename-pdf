@@ -43,7 +43,7 @@ jobs:
       # GUI snapshot/a11y tests (gui::tests) need a GPU adapter for wgpu;
       # hosted runners have none. Run them locally (playbooks, AGENTS.md).
       - name: Test
-        run: cargo test --workspace --locked -- --skip gui::tests
+        run: cargo test --workspace --locked --no-fail-fast -- --skip gui::tests
       - name: Icons up to date
         if: runner.os == 'Linux'
         run: cargo xtask icons --check

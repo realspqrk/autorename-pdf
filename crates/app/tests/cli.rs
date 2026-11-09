@@ -74,6 +74,20 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// A path as suggested commands print it: shell-quoted like
+/// `out::shell_quote` (Windows paths contain `\\`, so they are quoted).
+fn q(p: &Path) -> String {
+    let s = p.display().to_string();
+    let safe = s
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-_./:=,@+%".contains(c));
+    if safe {
+        s
+    } else {
+        format!("'{}'", s.replace('\'', "''"))
+    }
+}
+
 struct Env {
     root: tempfile::TempDir,
 }
@@ -728,8 +742,8 @@ fn tampered_plan_is_rejected_before_any_change() {
         assert!(
             hint.contains(&format!(
                 "autorename-pdf --config {} apply {}",
-                env.path("cfg/config.yaml").display(),
-                plan_file.display()
+                q(&env.path("cfg/config.yaml")),
+                q(&plan_file)
             )),
             "{hint}"
         );
@@ -990,7 +1004,7 @@ fn missing_model_hint_is_scoped_and_privacy_aware() {
             .find(|w| w.starts_with("ocr_models_missing"))
             .unwrap_or_else(|| panic!("{plan:#}"))
     };
-    let config = |env: &Env| env.path("cfg/config.yaml").to_string_lossy().into_owned();
+    let config = |env: &Env| q(&env.path("cfg/config.yaml"));
     let env = Env::ollama(&acme_mock());
     env.add_doc("image_invoice_springfield.pdf");
     let w = warning(&env);
@@ -1126,7 +1140,7 @@ fn review_entries_carry_evidence_and_commands() {
     // Suggested commands repeat the non-default --config, shell-quoted.
     let pre = format!(
         "autorename-pdf --config {} ",
-        env.path("cfg/config.yaml").display()
+        q(&env.path("cfg/config.yaml"))
     );
     assert!(
         cmds.contains(&format!("{pre}names merge 'ACME Corp' 'ACME Holding'").as_str()),
@@ -1270,7 +1284,7 @@ fn hints_repeat_the_effective_config() {
     assert!(
         hint.contains(&format!(
             "autorename-pdf --config {} undo --list",
-            env.path("cfg/config.yaml").display()
+            q(&env.path("cfg/config.yaml"))
         )),
         "{hint}"
     );
