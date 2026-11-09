@@ -127,7 +127,8 @@ Accent is **blue, not brand red**: red is reserved for errors/destructive action
 ## 3. Layout grid
 - Window: **default 1280 × 800**, **min 960 × 640** (`ViewportBuilder::with_min_inner_size`), position/size persisted (eframe `persist_window`). Content is fluid; no max width except prose (560) and settings column (640).
 - Regions (top→bottom): **Header** 48 (fill surface_sunken, bottom border) · **Toolbar** 40 (Preview/Companies only) · **Content** (flex) · **Action bar** 56 (fill surface, top border; present on Preview/Done). Header/toolbar/action-bar horizontal padding `space.lg`.
-- **List : detail = φ (1.618 : 1).** Detail width = round₈(window_w × 0.382), clamped [320, 560]; list gets the rest (1280 → 791 | 1 | 488; 960 → 591 | 1 | 368). Rationale: the list holds two filename lines + badges and needs the larger share; the detail is a reading pane whose 488 px ≈ 62 ch of body text sits in the optimal measure. User-resizable divider (8 px hit, 1 px visual), double-click resets to φ. `Ctrl+\` hides detail (list then full width).
+- **Details panel is opt-in (expert view, F2 2026-11-09).** Hidden by default; visibility persisted per computer (eframe storage, like theme). Toggle: icon button (`panel-right`, 32, ghost) at the right end of the list toolbar, tooltip "Show details (Ctrl+\\)" / "Hide details (Ctrl+\\)", pressed state while open; Companies uses the same toggle and storage. Selecting a row never opens it. Open: the split below.
+- **List : detail = φ (1.618 : 1).** Detail width = round₈(window_w × 0.382), clamped [320, 560]; list gets the rest (1280 → 791 | 1 | 488; 960 → 591 | 1 | 368). Rationale: the list holds two filename lines and needs the larger share; the detail is a reading pane whose 488 px ≈ 62 ch of body text sits in the optimal measure. User-resizable divider (8 px hit, 1 px visual), double-click resets to φ. `Ctrl+\` hides detail (list then full width).
 - Settings: left nav 200 (≈ 1280 × 0.156, fixed) + form column max 640 starting at `space.xl`. Companies: same φ split as Preview.
 - Vertical rhythm: section titles have `space.xl` above, `space.sm` below; fields in a group `space.lg` apart; groups `space.xxl` apart.
 
@@ -136,14 +137,14 @@ Wireframes at 1280 px; 1 char ≈ 10 px horizontally, annotations give exact px.
 
 ### 4.1 Header (all screens)
 ```
-| ■ AutoRename-PDF   Rename  Companies(3)  History        ◉ Cloud · OpenAI gpt-6-luna ▾  Invoice ▾  ⚙ |
-  20px mark+title_sm  tabs: 32h, 12px pad, active = text+2px accent underline   chip 24h      combo 32   icon-btn 32
+| ■ AutoRename-PDF   Rename  Companies(3)  History                                     [◉ Offline]  ⚙ |
+  20px mark+title_sm  tabs: 32h, 12px pad, active = text+2px accent underline           badge 20     icon-btn 32
 ```
-Tabs are a `Segmented`-free tab list (role Tab). Privacy chip: cloud = neutral badge with `cloud` icon + provider · model; offline = success badge `shield-check` + "Offline · Ollama gemma4". Click → Settings › Processing (scrolled to Privacy). Name-matching tab: label = plural from core `field_label` of the active profile's `harmonize_field` (business: "Companies"); hidden when the profile has none (Ctrl+2 then does nothing); count = entries with `review: true` (warning badge). Profile combo lists profiles from config.
+Settings live only in Settings (one source of truth): no profile combo, no provider chip, no quick toggles in the header. Tabs are a `Segmented`-free tab list (role Tab). Name-matching tab: label = plural from core `field_label` of the active profile's `harmonize_field` (business: "Companies"), shown whenever the profile has one (stable navigation; Ctrl+2 does nothing otherwise); count = entries with `review: true` (warning badge). Offline badge: passive success badge `shield-check` "Offline", only when the saved privacy is offline; tooltip "Documents stay on this computer. Change this in Settings › Processing." Not interactive.
 
 ### 4.2 Empty / onboarding (first run = no usable provider config)
 ```
-| header (privacy chip shows "Not set up" warning)                                                          |
+| header                                                                                                    |
 |                         ┌───────────────── 640 × 280, radius.xl, dashed border_strong ──────────────┐     |
 |                         │                     [file-up icon 48, text_muted]                         │     |
 |                         │              Drop PDFs or folders here            (title_sm)              │     |
@@ -166,24 +167,25 @@ Card hidden once config validates; drop zone then fills the content area (min 24
 ### 4.3 Preview (plan list)
 ```
 | header                                                                                                    |
-| 12 files · 9 ready · 2 need review · 1 error     (All 12|Ready 9|Review 2|Errors 1)   [search 200]  [+ Add] |  toolbar 40
-|--list 791-----------------------------------------------------------------|1|--detail 488-----------------|
-|[x] ✓  20251103 Amazon AP 12,13.pdf                         ◉Text ◉Metadata | | (§4.4)                       |
-|       from scan_0041.pdf                                                   | |                              |  row 56
-|[x] !  20251028 Telekom Deutschland AP 54,99.pdf  ✎   ◉OCR ◉New company ●●○ | |                              |
-|       from Rechnung (2).pdf · Low confidence on date                       | |                              |
-|[ ] ✕  Extraction failed · Provider timeout          [Retry]               | |                              |
-|       from broken.pdf                                                      | |                              |
+| 12 files · 2 need a look                                   (All 12|Needs a look 2)   [+ Add…]   [▯▮]     |  toolbar 40
+|--list (full width; φ split with §4.4 when details are open)-----------------------------------------------|
+|[x] ✓  20251103 Amazon AP 12,13.pdf                                                                        |
+|       from scan_0041.pdf                                                                                  |  row 56
+|[x] !  20251028 Telekom Deutschland AP 54,99.pdf  ✎                                                        |
+|       from Rechnung (2).pdf · Two dates were found. Check the date.                                       |
+|[ ] ✕  Couldn't read the file · The AI service didn't answer in time                       [Try again]     |
+|       from broken.pdf                                                                                     |
 |---------------------------------------------------------------------------------------------------------|
 | 10 of 12 selected · 1 name edited                                        [Clear list]  [Rename 10 files] | action bar 56
 ```
-- **PlanRow** (56 h, padding 8/16): checkbox (32 hit) · status icon 16 (`circle-check` success, `triangle-alert` warning, `circle-x` danger, spinner while analyzing) · gap 12 · line 1 proposed name `type.mono` in `text` (hierarchy by color: line 2 is `text_muted`) · line 2 `type.mono_sm` "from <old>" + `·` + first warning in caption warning color · right cluster (gap 4): tier badge (Text / OCR / Vision), enrich badge (Metadata / Metadata skipped), learn badge (Alias added / New company / Review; Review stays after renaming). No confidence meter: core has no AI confidence, and text-layer quality is shown only in the detail Extraction section. The badge cluster is anchored at list right − 16 and never drops badges; line 1 (filename, middle ellipsis) yields instead. Line 2 has its own width budget (x 68 … right − 16): warnings get a `triangle-alert` 12 icon and end ellipsis, full text in tooltip and detail. Long names: middle ellipsis, full name in tooltip and detail.
-- States: rest surface · hover surface_hover · selected (keyboard/mouse active row) selection fill + 2 px accent left bar · unchecked (excluded) line 1 text_muted + badge "Skipped" · focus inset ring · analyzing: line 1 = step text ("Reading text…", "Running OCR…", "Asking OpenAI…") in muted, progress shimmer disabled under reduce motion · error: line 1 error summary, `Retry` ghost sm button (24 h).
+- Toolbar: plain summary "N files" + " · K need a look" (K = review + error rows; omitted when 0); while analyzing "Analyzing 4 of 12 · about 20 s left". Filter `Segmented` (All N | Needs a look K) only while K > 0 (otherwise the filter resets to All). No search box. [+ Add…] secondary, then the details toggle (§3).
+- **PlanRow** (56 h, padding 8/16): checkbox (32 hit) · status icon 16 (`circle-check` success, `triangle-alert` warning, `circle-x` danger, spinner while analyzing) · gap 12 · line 1 proposed name `type.mono` in `text` · line 2 `type.mono_sm` "from <old>" + `·` + one plain problem sentence in caption warning color (core warning strings mapped to plain copy by `model::plain_warning`; unknown strings fall back to the raw text as a sentence; the raw text stays in the details panel). No badges in rows: reading tier, metadata and name-matching outcome live in the details panel. Line 1 middle ellipsis, line 2 end ellipsis, full text in tooltip.
+- States: rest surface · hover surface_hover · selected selection fill + 2 px accent left bar · unchecked (excluded) line 1 text_muted · focus inset ring · analyzing: line 1 = step text in muted · error: line 1 plain error summary, `Try again` ghost sm button (24 h).
 - **Inline edit** (F2, double-click line 1, or ✎ in detail): line 1 becomes `Field` (mono, 32 h) with `.pdf` fixed suffix adornment; validates live with core filename rules (invalid chars, length, collision with another row or existing file → danger helper below, row grows to 72). Enter commits, Esc reverts. Edited rows show ✎ `pencil` icon; "Reset to suggested" in detail.
 - Sorting: plan order (input order); toolbar filter is a `Segmented`. Errors and review rows are never auto-checked off; errors are unchecked and uncheckable.
 - Primary button label always contains the count; disabled with tooltip "Select at least one file" when 0. Rename uses `apply` on the shown plan (no new AI calls); source-hash mismatch → row error "File changed since analysis · Re-analyze".
 
-### 4.4 Detail pane (selected row; padding 16, scrolls independently)
+### 4.4 Details panel (expert view, opt-in §3; selected row; padding 16, scrolls independently)
 ```
 | 20251028 Telekom Deutschland AP 54,99.pdf  [pencil]   (title_sm mono, wraps) |
 | from C:\Scans\Rechnung (2).pdf  [copy] [external-link]          (caption)   |
@@ -209,11 +211,11 @@ Analysis: toolbar shows determinate `Progress` (4 h, full list width, under tool
 ### 4.6 Done / summary
 ```
 |  ✓ (icon 24 success)  Renamed 10 files                         (headline 24/32)            |
-|  9 with metadata · 1 metadata skipped (signed) · 2 new companies, 1 needs review · 0 errors |
+|  1 couldn't be renamed · 1 new company needs a look           (caption; only non-zero parts) |
 |  [Undo rename]  [Open folder]  [Review companies]                         [Rename more files] |
 |  ── result list (PlanRow read-only, status = rename_status) ────────────────────────────────  |
 ```
-Summary is a card (elev.1, padding 24) at top of the list pane; the detail pane stays. Undo reverts renames, metadata and learned aliases of the batch (copy says so in tooltip). After undo: success toast "Undid 10 renames" ; conflict per file → banner "2 files changed after renaming and were not restored" + list. **History** tab: list of batches (date, file count, folder) each with `[Undo]`; undone batches greyed with "Undone" badge.
+Summary is a card (elev.1, padding 24) at top of the list pane; the details panel keeps its visibility. Plain copy: no metadata/tier counts (those are in the details panel). [Review companies] (field noun) only when the batch created entries needing review. Undo reverts renames, metadata and learned aliases of the batch (copy says so in tooltip). After undo: success toast "Undid 10 renames" ; conflict per file → banner "2 files changed after renaming and were not restored" + list. **History** tab: list of batches (date, file count, folder) each with `[Undo]`; undone batches greyed with "Undone" badge.
 
 ### 4.7 Settings (left nav 200: General, Processing, Naming, About)
 Four pages; each page is one scroll column (max 640) of groups. Group heading `type.title_sm` + one-line muted description; `space.xxl` between groups. Every control has a label, a one-line helper that says what it does in plain words (no config key names), and a live status line where the outcome depends on other settings. Every config key except profile templates/fields is editable here (templates/fields: YAML, [Open settings file]). Saving writes only the keys that changed (comments and untouched bytes stay identical: CRLF line endings, the final newline, and the whole old value of an edited key, block scalars and flow values included, are handled by `autorename_core::config_edit`). Free-text values are always written quoted. Storage details (`.env`, variable names, config keys) go into tooltips, never the primary text.
@@ -292,11 +294,10 @@ States for all interactive components: **rest · hover (motion.fast) · pressed 
 | Ctrl+Enter | primary action (Rename N files / Save changes) |
 | Ctrl+Z | Undo last batch (Done/History; confirms if > 1 batch back) |
 | Ctrl+R | Retry failed rows |
-| Ctrl+F | focus search |
-| Ctrl+\ | toggle detail pane |
+| Ctrl+\ | show/hide details panel |
 | Esc | close dialog/toast/edit, stop analysis (asks) |
 | Tab / Shift+Tab | header → toolbar → list → detail → action bar; inside list, arrows move rows and Tab leaves |
-AccessKit labels (via `widget_info`): PlanRow "scan_0041.pdf, will be renamed to 20251103 Amazon AP 12,13.pdf, text extraction, metadata will be written, included"; status icons are not separate nodes (folded into row label); icon buttons "Copy original path", "Edit proposed name"; badges contribute words not colors; privacy chip "Privacy: cloud, OpenAI gpt-6-luna. Open privacy settings"; progress "Analyzing, 4 of 12" with polite live updates; dialogs role Dialog with title as label. Tested with `egui_kittest` a11y tree queries (`get_by_label`).
+AccessKit labels (via `widget_info`): PlanRow "scan_0041.pdf, will be renamed to 20251103 Amazon AP 12,13.pdf, text extraction, metadata will be written, included"; status icons are not separate nodes (folded into row label); icon buttons "Copy original path", "Edit proposed name"; badges contribute words not colors; details toggle "Show details" / "Hide details" (role ToggleButton); progress "Analyzing, 4 of 12" with polite live updates; dialogs role Dialog with title as label. Tested with `egui_kittest` a11y tree queries (`get_by_label`).
 
 ## 9. Visual acceptance checklist (review gate, all must pass)
 1. `theme.rs` is the only file with color literals and px numbers (grep for `Color32::from_rgb`/numeric `vec2(` outside theme/widgets = 0 hits).
