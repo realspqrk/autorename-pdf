@@ -306,7 +306,7 @@ Issues and forks are welcome; pull requests are not being accepted right now.
 
 Enjoying AutoRename-PDF? It may save you hours. Even in the age of AI, building and maintaining it takes a lot of time and resources. Please consider a donation — or try [PhraseVault](https://phrasevault.app), our text expander. You may enjoy it too.
 
-[GitHub Sponsors](https://github.com/sponsors/ptmrio) · [Ko-fi](https://ko-fi.com/spqrk) · [PayPal](https://paypal.me/realSPQRK) · [Star the repo](https://github.com/realspqrk/autorename-pdf). Thank you [@claus82](https://github.com/claus82).
+[GitHub Sponsors](https://github.com/sponsors/realspqrk) · [Ko-fi](https://ko-fi.com/spqrk) · [PayPal](https://paypal.me/realSPQRK) · [Star the repo](https://github.com/realspqrk/autorename-pdf). Thank you [@claus82](https://github.com/claus82).
 
 ## License
 

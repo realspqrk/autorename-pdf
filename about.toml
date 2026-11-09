@@ -1,0 +1,25 @@
+# cargo-about 0.9.3 config: `cargo xtask notices` (THIRD_PARTY_NOTICES.md).
+# Allowlist must equal deny.toml [licenses].allow.
+accepted = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CDLA-Permissive-2.0", # webpki-root-certs, build-time only (ort-sys download)
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "OFL-1.1",
+  "Ubuntu-font-1.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+private = { ignore = true }

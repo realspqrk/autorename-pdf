@@ -18,6 +18,8 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo xtask icons --check            # generated icons match the SVG masters
+cargo xtask notices --check          # THIRD_PARTY_NOTICES.md is current (cargo-about 0.9.3)
+cargo deny check licenses           # license allowlist (cargo-deny 0.20.2; deny.toml)
 AWS_LC_SYS_PREBUILT_NASM=1 CARGO_TARGET_DIR=target/xwin \
   cargo xwin clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
 ```

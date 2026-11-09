@@ -78,6 +78,7 @@ Toolchain via mise: prefix `PATH=$HOME/.local/share/mise/shims:$PATH` when `carg
 | OCR accuracy test | `AUTORENAME_MODELS_DIR=<root with latin/> cargo test -p autorename-core --features ocr --test extract ocr_` |
 | Live providers | `AUTORENAME_LIVE=1 cargo test -p autorename-core --test providers_live -- --ignored --nocapture` (keys from `.env`) |
 | Icons | `cargo xtask icons [--check]` |
+| Third-party notices | `cargo xtask notices [--check]` (needs cargo-about 0.9.3; allowlist in `about.toml` + `deny.toml`; manual entries in `assets/licenses/`) |
 | Packages | `cargo xtask dist [--target <triple>] [--sign]` (see `playbooks/release.md`) |
 | Windows cross-check | `AWS_LC_SYS_PREBUILT_NASM=1 CARGO_TARGET_DIR=target/xwin cargo xwin clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` |
 

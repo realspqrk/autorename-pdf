@@ -4,12 +4,14 @@
 //! - `icons [--check]`: render `assets/icons/generated/` from the SVG masters.
 //! - `dist [--target <triple>] [--formats a,b] [--no-package]`: release build,
 //!   natives, staging and cargo-packager (`playbooks/release.md`).
+//! - `notices [--check]`: `THIRD_PARTY_NOTICES.md` from cargo-about + `assets/licenses/`.
 //! - `sign <files…>`: Azure Trusted Signing via signtool (Windows only).
 //! - `check-tag <tag>`: the release tag must be `v<workspace version>`.
 
 mod dist;
 mod icons;
 mod natives;
+mod notices;
 mod sign;
 
 use std::process::ExitCode;
@@ -19,6 +21,7 @@ fn usage() -> ExitCode {
     eprintln!("  fetch-natives [--target <triple> | --all]");
     eprintln!("  icons [--check]");
     eprintln!("  dist [--target <triple>] [--formats <list>] [--no-package]");
+    eprintln!("  notices [--check]");
     eprintln!("  sign <file>...");
     eprintln!("  check-tag <tag>   (release tag must be v<workspace version>)");
     eprintln!(
@@ -80,6 +83,11 @@ fn main() -> ExitCode {
         Some("dist") => match dist::Opts::parse(rest) {
             Some(o) => report(dist::run(&o)),
             None => usage(),
+        },
+        Some("notices") => match rest {
+            [] => report(notices::run(&natives::workspace_root(), false)),
+            [c] if c == "--check" => report(notices::run(&natives::workspace_root(), true)),
+            _ => usage(),
         },
         Some("sign") if !rest.is_empty() => report(sign::run(rest)),
         Some("check-tag") if rest.len() == 1 => report(dist::check_tag_cmd(&rest[0])),

@@ -47,3 +47,17 @@ jobs:
       - name: Icons up to date
         if: runner.os == 'Linux'
         run: cargo xtask icons --check
+
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3,cargo-deny@0.20.2
+      - name: Licenses allowlist
+        run: cargo deny check licenses
+      - name: Third-party notices up to date
+        run: cargo xtask notices --check

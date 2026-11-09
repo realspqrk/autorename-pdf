@@ -23,8 +23,21 @@ jobs:
         if: github.ref_type == 'tag'
         run: cargo xtask check-tag "${GITHUB_REF_NAME}"
 
+  licenses:
+    name: license gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3,cargo-deny@0.20.2
+      - run: cargo deny check licenses
+      - run: cargo xtask notices --check
+
   dist:
-    needs: version
+    needs: [version, licenses]
     name: dist (${{ matrix.triple }})
     strategy:
       fail-fast: false

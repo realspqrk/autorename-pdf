@@ -1,0 +1,40 @@
+## Rust crates
+
+Licenses whose text carries a copyright line are listed once per distinct text,
+with the crates that use it (name, version, authors). The others are listed once
+in full, followed by their crates (name, version, source).
+
+{{#each overview}}
+- {{id}}: {{count}}
+{{/each}}
+
+{{#each overview}}
+{{#unless (or (eq id "MIT") (eq id "BSD-2-Clause") (eq id "BSD-3-Clause") (eq id "ISC") (eq id "Zlib") (eq id "BSL-1.0") (eq id "Unicode-3.0"))}}
+### {{id}}
+
+{{name}}.{{#if (eq id "MPL-2.0")}} The covered source code is unmodified and available from the crate source links below (crates.io: https://crates.io/crates/option-ext/0.2.0).{{/if}} Used by:
+
+{{#each ../licenses}}{{#if (eq ../id id)}}{{#each used_by}}- {{crate.name}} {{crate.version}}{{#if crate.repository}} ({{crate.repository}}){{/if}}
+{{/each}}{{/if}}{{/each}}
+
+```text
+{{{text}}}
+```
+
+{{/unless}}
+{{/each}}
+{{#each licenses}}
+{{#if (or (eq id "MIT") (eq id "BSD-2-Clause") (eq id "BSD-3-Clause") (eq id "ISC") (eq id "Zlib") (eq id "BSL-1.0") (eq id "Unicode-3.0"))}}
+### {{id}}
+
+Used by:
+
+{{#each used_by}}- {{crate.name}} {{crate.version}}{{#if crate.authors}} ({{#each crate.authors}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}){{/if}}
+{{/each}}
+
+```text
+{{{text}}}
+```
+
+{{/if}}
+{{/each}}
