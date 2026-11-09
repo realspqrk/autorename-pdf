@@ -88,13 +88,9 @@ pub fn toolbar(ui: &mut Ui, rect: Rect, list_w: f32, m: &Model, acts: &mut Vec<A
         });
     });
     let max_w = right_edge - inner.left() - space::MD;
-    let ty = if m.analyzing() {
-        typ::CAPTION
-    } else {
-        typ::BODY
-    };
-    let shown = crate::gui::components::ellipsize_end(ui, &text, ty, max_w);
-    paint_text(ui, inner.left(), cy, &shown, ty, p.text_muted);
+    // One style for the summary and the progress line (no size jump).
+    let shown = crate::gui::components::ellipsize_end(ui, &text, typ::BODY, max_w);
+    paint_text(ui, inner.left(), cy, &shown, typ::BODY, p.text_muted);
     if let Phase::Analyzing(a) = &m.phase {
         let pr = Rect::from_min_size(
             egui::pos2(rect.left(), rect.bottom() - size::PROGRESS_H),
@@ -130,6 +126,8 @@ pub fn row_view<'a>(
         selected: m.active == Some(i),
         edited: r.edited.is_some(),
         retry: m.retryable(i) && !m.busy(),
+        open: !done && r.status() == RowStatus::Review,
+        editable: !done && !m.busy() && matches!(r.status(), RowStatus::Ready | RowStatus::Review),
         read_only: done,
         focusable: m.active == Some(i),
         a11y: model::row_a11y(r),
@@ -230,6 +228,14 @@ pub fn list(
                     if out.retry {
                         acts.push(Action::Retry(i));
                     }
+                    if out.open {
+                        let path = m.rows[i].current_path(&m.restored).to_path_buf();
+                        acts.push(Action::OpenPath(path));
+                    }
+                    if out.edit {
+                        acts.push(Action::Activate(i));
+                        acts.push(Action::StartEdit(i));
+                    }
                 }
             });
     });
@@ -292,15 +298,15 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
     });
 }
 
-struct DoneSummary {
+pub(crate) struct DoneSummary {
     icon: char,
     tone: Tone,
-    title: String,
+    pub title: String,
     /// Plain caption, only non-zero parts (§4.6); may be empty.
-    line: String,
+    pub line: String,
 }
 
-fn done_summary(m: &Model) -> Option<DoneSummary> {
+pub(crate) fn done_summary(m: &Model) -> Option<DoneSummary> {
     let rep = m.report.as_ref()?;
     let s = &rep.summary;
     let failed = failed_count(m);
@@ -311,12 +317,17 @@ fn done_summary(m: &Model) -> Option<DoneSummary> {
     } else {
         (theme::icon::CIRCLE_CHECK, Tone::Success)
     };
+    // Every file of the plan is accounted for: renamed + couldn't be
+    // renamed + already named + not selected + couldn't be read + not
+    // analyzed (Stop) + left as it was (rename stopped) = all files.
+    let left = m.left_out;
+    let total = s.total + left.not_selected + left.unread + left.not_analyzed;
     let title = if m.undone {
         format!("Undid {}", plural(s.renamed, "rename", "renames"))
     } else if s.cancelled > 0 {
-        format!("Stopped · renamed {} of {} files", s.renamed, s.total)
+        format!("Stopped · renamed {} of {total} files", s.renamed)
     } else if failed > 0 {
-        format!("Renamed {} of {} files", s.renamed, s.total)
+        format!("Renamed {} of {total} files", s.renamed)
     } else {
         format!("Renamed {}", plural(s.renamed, "file", "files"))
     };
@@ -324,6 +335,22 @@ fn done_summary(m: &Model) -> Option<DoneSummary> {
     if !m.undone {
         if failed > 0 {
             parts.push(format!("{failed} couldn't be renamed"));
+        }
+        if s.unchanged > 0 {
+            parts.push(plural(
+                s.unchanged,
+                "already had its name",
+                "already had their names",
+            ));
+        }
+        if left.not_selected > 0 {
+            parts.push(format!("{} not selected", left.not_selected));
+        }
+        if left.unread > 0 {
+            parts.push(format!("{} couldn't be read", left.unread));
+        }
+        if left.not_analyzed > 0 {
+            parts.push(format!("{} not analyzed", left.not_analyzed));
         }
         if s.cancelled > 0 {
             parts.push(plural(s.cancelled, "left as it was", "left as they were"));
@@ -466,7 +493,7 @@ fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
             if Button::secondary("Undo rename")
                 .icon(theme::icon::UNDO_2)
                 .enabled(can_undo)
-                .tooltip("Restores the original names, removes the written metadata and forgets learned company names from this batch")
+                .tooltip("Restores the original names, removes the written metadata and forgets learned company names from this run")
                 .show(ui)
                 .clicked()
             {

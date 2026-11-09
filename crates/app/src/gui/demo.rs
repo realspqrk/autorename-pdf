@@ -659,7 +659,7 @@ pub fn merge_model() -> Model {
     m.companies.merge = Some(crate::gui::pages::MergeDialog {
         from: "Telekom Deutschland".into(),
         search: String::new(),
-        target: Some("Telekom Austria".into()),
+        target: None,
     });
     m
 }

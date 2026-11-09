@@ -6,7 +6,7 @@ use egui::{Id, Key, Rect, Sense, Ui, WidgetInfo};
 use super::Action;
 use crate::gui::components::{
     Badge, Button, Field, anim, ellipsize_end, focus_ring, in_rect, label, mix, paint_text,
-    paint_text_center, paint_wrapped, plural, segmented, wrapped_lines,
+    paint_text_center, paint_wrapped, segmented, wrapped_lines,
 };
 use crate::gui::model::{Model, noun};
 use crate::gui::pages::{CompanyFilter, entry_caption, spellings_caption};
@@ -355,7 +355,7 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         ui.add_space(space::SM);
                         let src = match e.source {
                             Source::Auto => "Added automatically while renaming",
-                            Source::User => "Added by you in the list file",
+                            Source::User => "Added or confirmed by you",
                         };
                         label(ui, src, typ::BODY, p.text);
                         if let Some(d) = &e.added {
@@ -363,23 +363,6 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                             label(ui, &format!("Added {d}"), typ::CAPTION, p.text_muted);
                         }
                         ui.add_space(space::XL);
-                        if e.source == Source::User {
-                            label(
-                                ui,
-                                "Added by you in the list file · not editable here",
-                                typ::BODY,
-                                p.text_muted,
-                            );
-                            ui.add_space(space::SM);
-                            if Button::secondary("Open file")
-                                .icon(theme::icon::EXTERNAL_LINK)
-                                .show(ui)
-                                .clicked()
-                            {
-                                acts.push(Action::OpenCompaniesFile);
-                            }
-                            return;
-                        }
                         ui.horizontal_wrapped(|ui| {
                             ui.spacing_mut().item_spacing = theme::v2(space::SM, space::SM);
                             let keep = format!("Keep as new {one}");
@@ -411,6 +394,17 @@ fn detail(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                             {
                                 m.companies.rename =
                                     Some((e.canonical.clone(), e.canonical.clone()));
+                            }
+                            // Your own entries: merge and rename keep every
+                            // hand-written spelling (`harmonize::merge` /
+                            // `rename`); the file stays one click away.
+                            if e.source == Source::User
+                                && Button::secondary("Open file")
+                                    .icon(theme::icon::EXTERNAL_LINK)
+                                    .show(ui)
+                                    .clicked()
+                            {
+                                acts.push(Action::OpenCompaniesFile);
                             }
                         });
                     });
@@ -451,7 +445,6 @@ fn merge_dialog(ctx: &egui::Context, m: &mut Model, acts: &mut Vec<Action>) {
     let Some(db) = m.companies.db.clone() else {
         return;
     };
-    let from_entry = db.entries.iter().find(|e| e.canonical == md.from).cloned();
     let (one, many) = nouns(m);
     let search_label = format!("Search {many}");
     let mut close = false;
@@ -528,18 +521,25 @@ fn merge_dialog(ctx: &egui::Context, m: &mut Model, acts: &mut Vec<Action>) {
                 );
             }
             ui.add_space(space::LG);
-            let n = from_entry
-                .as_ref()
-                .map_or(0, |e| 1 + e.aliases.len() + e.learned.len());
+            // What the merge changes, and what it doesn't (existing files).
             let preview = match &target {
-                Some(t) => format!("{} move to {t}.", plural(n, "name", "names")),
+                Some(t) => {
+                    format!("Future documents use {t}. Existing file names stay as they are.")
+                }
                 None => format!("Choose the {one} to keep."),
             };
-            label(ui, &preview, typ::BODY, p.text_muted);
+            crate::gui::components::paragraph(ui, &preview, typ::BODY, p.text_muted);
             ui.add_space(space::XL);
+            let merge_label = target
+                .as_ref()
+                .map_or_else(|| "Merge".to_string(), |t| format!("Merge into {t}"));
             let (ok, cancel) = footer(
                 ui,
-                Button::primary("Merge").enabled(target.is_some() && !m.companies.busy()),
+                // A long name ends in "…" (full text in tooltip/AccessKit);
+                // Cancel always stays in the dialog.
+                Button::primary(&merge_label)
+                    .max_width(w - Button::secondary("Cancel").width(ui) - space::SM)
+                    .enabled(target.is_some() && !m.companies.busy()),
                 "Cancel",
             );
             if ok && let Some(t) = &target {

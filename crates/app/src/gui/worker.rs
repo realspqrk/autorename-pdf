@@ -34,6 +34,8 @@ pub enum Msg {
     ModelDone(Result<String, String>),
     /// Name list loaded or edited (see [`NamesDone`]).
     Names(NamesDone),
+    /// The system viewer/browser could not be started for this target.
+    OpenFailed(PathBuf, String),
 }
 
 /// Edit of a name list, run under its lock by `harmonize::update_db`.
@@ -70,6 +72,9 @@ pub struct Worker {
     /// OCR model download cancel (separate from analysis/apply).
     pub model_cancel: Arc<AtomicBool>,
     pub repaint: Option<egui::Context>,
+    /// Tests: targets of [`Worker::open`] (nothing is launched).
+    #[cfg(test)]
+    pub opened: Vec<PathBuf>,
 }
 
 impl Worker {
@@ -81,6 +86,8 @@ impl Worker {
             cancel: Arc::new(AtomicBool::new(false)),
             model_cancel: Arc::new(AtomicBool::new(false)),
             repaint,
+            #[cfg(test)]
+            opened: Vec::new(),
         }
     }
 
@@ -98,6 +105,29 @@ impl Worker {
             };
             f(&tx, &repaint);
             repaint();
+        });
+    }
+
+    /// Open a file, folder or URL with the system's default program. The
+    /// process launch runs here, never on the UI thread; a failure comes
+    /// back as [`Msg::OpenFailed`].
+    pub fn open(&mut self, target: PathBuf) {
+        #[cfg(test)]
+        {
+            self.opened.push(target);
+        }
+        #[cfg(not(test))]
+        self.spawn(move |tx, _| {
+            let cmd = if cfg!(windows) {
+                "explorer"
+            } else if cfg!(target_os = "macos") {
+                "open"
+            } else {
+                "xdg-open"
+            };
+            if let Err(e) = std::process::Command::new(cmd).arg(&target).spawn() {
+                let _ = tx.send(Msg::OpenFailed(target, e.to_string()));
+            }
         });
     }
 

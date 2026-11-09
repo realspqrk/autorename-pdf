@@ -1,5 +1,5 @@
-//! History: undo batches (date, file count, folder) with per-batch Undo;
-//! undone batches greyed with an "Undone" badge (§4.6).
+//! History: rename runs (journal batches: date, file count, folder) with
+//! per-run Undo; undone runs greyed with an "Undone" badge (§4.6).
 
 use egui::{Rect, Sense, Ui, WidgetInfo};
 
@@ -24,7 +24,7 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
     let active = h.batches.iter().filter(|b| !b.undone).count();
     let summary = format!(
         "{} · {} can be undone",
-        plural(h.batches.len(), "batch", "batches"),
+        plural(h.batches.len(), "rename run", "rename runs"),
         active
     );
     paint_text(
@@ -45,7 +45,7 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
         paint_text_center(
             ui,
             list,
-            "No renames yet. Every rename batch appears here with an Undo button.",
+            "No renames yet. Every rename run appears here with an Undo button.",
             typ::CAPTION,
             p.text_muted,
         );
@@ -102,13 +102,13 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
                         );
                         right -= bw + space::MD;
                     } else {
-                        let a11y = format!("Undo batch from {}", short_time(&b.timestamp));
+                        let a11y = format!("Undo rename run from {}", short_time(&b.timestamp));
                         let btn = Button::secondary("Undo")
                             .icon(theme::icon::UNDO_2)
                             .a11y(a11y)
                             .loading(busy)
                             .enabled(!m.busy())
-                            .tooltip("Restores the original names, removes written metadata and forgets learned company names from this batch");
+                            .tooltip("Restores the original names, removes written metadata and forgets learned company names from this run");
                         let bw = btn.width(ui);
                         let br = Rect::from_min_size(
                             egui::pos2(right - bw, r.center().y - size::CONTROL / 2.0),

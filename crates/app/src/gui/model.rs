@@ -1,5 +1,6 @@
 //! GUI state machine (no egui): rows, phases, filters, plan assembly.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -117,6 +118,19 @@ impl Row {
         })
     }
 
+    /// Where the file is now: the rename target after a successful rename,
+    /// unless undo restored that file (`restored` holds restored targets),
+    /// else the source.
+    pub fn current_path(&self, restored: &HashSet<PathBuf>) -> &std::path::Path {
+        match &self.report {
+            Some(rep) if rep.rename_status == RenameStatus::Renamed => match &rep.target {
+                Some(t) if !restored.contains(t) => t,
+                _ => &self.source,
+            },
+            _ => &self.source,
+        }
+    }
+
     pub fn is_error(&self) -> bool {
         self.status() == RowStatus::Error
     }
@@ -168,6 +182,11 @@ impl Row {
             None => &item.warnings,
         };
         if let Some(w) = warnings.first() {
+            // The scan reader found nothing, but AI image reading ran: the
+            // name comes from the image, so say that (not "no text").
+            if w == OCR_NO_TEXT && item.tier == Some(Tier::VisionNeeded) && item.error.is_none() {
+                return Some(OCR_NO_TEXT_VISION.into());
+            }
             return Some(plain_warning(w));
         }
         let entry_added = self
@@ -272,6 +291,20 @@ pub fn error_copy(e: &ErrorInfo) -> String {
         }
     }
 }
+
+/// Plan files a rename did not touch, by reason.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LeftOut {
+    /// Analyzed but unchecked.
+    pub not_selected: usize,
+    /// The analysis failed.
+    pub unread: usize,
+    /// Never analyzed (Stop before the file was reached).
+    pub not_analyzed: usize,
+}
+
+const OCR_NO_TEXT: &str = "OCR returned no text";
+const OCR_NO_TEXT_VISION: &str = "The local scan reader couldn't read this page. AI read its image; compare the name with the original.";
 
 /// Core warning strings (`PlanItem::warnings`: extraction, direction,
 /// amount, name matching) as one plain sentence for office users (§4.3).
@@ -577,8 +610,14 @@ pub struct Model {
     pub phase: Phase,
     pub meta: Option<PlanMeta>,
     pub report: Option<ApplyReport>,
+    /// Files of the plan the last rename did not touch. They leave the
+    /// result list; the Done card counts them (§4.6).
+    pub left_out: LeftOut,
     pub undo: Option<UndoReport>,
     pub undone: bool,
+    /// Rename targets the undo of the current batch put back (per file:
+    /// a failed restore keeps its target).
+    pub restored: HashSet<PathBuf>,
     pub config: ConfigState,
     pub detail_visible: bool,
     /// User-resized detail width (`None` = φ formula).
@@ -637,6 +676,18 @@ pub fn key_var(id: &str) -> &'static str {
     config::default_key_var(id).unwrap_or("")
 }
 
+/// The provider's own page for creating an API key (setup card "Get a
+/// key"); `None` for Ollama. Checked 2026-11-09 against the providers' docs.
+pub fn key_url(id: &str) -> Option<&'static str> {
+    match id {
+        "openai" => Some("https://platform.openai.com/api-keys"),
+        "anthropic" => Some("https://platform.claude.com/settings/keys"),
+        "gemini" => Some("https://aistudio.google.com/apikey"),
+        "xai" => Some("https://console.x.ai/team/default/api-keys"),
+        _ => None,
+    }
+}
+
 pub fn provider_label(id: &str) -> &str {
     PROVIDERS.iter().find(|p| p.0 == id).map_or(id, |p| p.1)
 }
@@ -663,6 +714,8 @@ impl Model {
             report: None,
             undo: None,
             undone: false,
+            restored: HashSet::new(),
+            left_out: LeftOut::default(),
             config,
             // Expert view, opt-in (§3).
             detail_visible: false,
@@ -1014,12 +1067,22 @@ impl Model {
     }
 
     pub fn apply_report(&mut self, report: ApplyReport) {
+        self.restored.clear();
         for f in &report.files {
             if let Some(r) = self.rows.iter_mut().find(|r| r.source == f.source) {
                 r.report = Some(f.clone());
             }
         }
         // Excluded rows leave the result list; every result stays visible.
+        let mut left = LeftOut::default();
+        for r in self.rows.iter().filter(|r| r.report.is_none()) {
+            match &r.item {
+                None => left.not_analyzed += 1,
+                Some(_) if r.is_error() => left.unread += 1,
+                Some(_) => left.not_selected += 1,
+            }
+        }
+        self.left_out = left;
         self.rows.retain(|r| r.report.is_some());
         self.filter = Filter::All;
         self.active = (!self.rows.is_empty()).then_some(0);
@@ -1071,8 +1134,10 @@ impl Model {
         self.rows.clear();
         self.active = None;
         self.report = None;
+        self.left_out = LeftOut::default();
         self.undo = None;
         self.undone = false;
+        self.restored.clear();
         self.meta = None;
         self.run_fp = None;
         self.editing = None;

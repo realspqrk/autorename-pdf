@@ -3,7 +3,7 @@
 use egui::{Key, Pos2, Rect, Response, Sense, Shape, Ui, WidgetInfo};
 
 use super::button::Button;
-use super::{focus_ring, galley, paint_galley_v, paint_icon};
+use super::{ellipsize_end, focus_ring, galley, paint_galley_v, paint_icon};
 use crate::gui::theme::{self, size, space, stroke};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,6 +39,99 @@ fn dashed_rounded(rect: Rect, r: f32) -> Vec<Pos2> {
     }
     pts.push(pts[0]);
     pts
+}
+
+/// Full form (≥ `DROP_MIN_H`), centered stack: icon 48 · 16 · title 24 ·
+/// 4 · caption 16 · 24 · buttons 32. Returns the two button origins.
+fn stacked_layout(
+    ui: &Ui,
+    rect: Rect,
+    title: &str,
+    sub: &str,
+    state: DropState,
+    (w1, w2): (f32, f32),
+) -> (Pos2, Pos2) {
+    let buttons_w = w1 + space::SM + w2;
+    let p = theme::palette(ui);
+    let block = size::ICON_XL
+        + space::LG
+        + theme::typ::TITLE_SM.line
+        + space::XS
+        + theme::typ::CAPTION.line
+        + space::XL
+        + size::CONTROL;
+    let mut y = theme::snap4(rect.center().y - block / 2.0);
+    let cx = rect.center().x;
+    let icon_c = if state == DropState::Invalid {
+        p.danger
+    } else {
+        p.text_muted
+    };
+    paint_icon(
+        ui,
+        egui::pos2(cx, y + size::ICON_XL / 2.0),
+        theme::icon::FILE_UP,
+        size::ICON_XL,
+        icon_c,
+    );
+    y += size::ICON_XL + space::LG;
+    let g = galley(ui, title, theme::typ::TITLE_SM);
+    paint_galley_v(
+        ui,
+        cx - g.size().x / 2.0,
+        y + theme::typ::TITLE_SM.line / 2.0,
+        g,
+        p.text,
+    );
+    y += theme::typ::TITLE_SM.line + space::XS;
+    let g = galley(ui, sub, theme::typ::CAPTION);
+    paint_galley_v(
+        ui,
+        cx - g.size().x / 2.0,
+        y + theme::typ::CAPTION.line / 2.0,
+        g,
+        p.text_muted,
+    );
+    y += theme::typ::CAPTION.line + space::XL;
+    let x0 = theme::snap4(cx - buttons_w / 2.0);
+    (egui::pos2(x0, y), egui::pos2(x0 + w1 + space::SM, y))
+}
+
+/// Compact form (`DROP_COMPACT_H`, below `DROP_MIN_H`): one row, padding
+/// 24, title + caption left (ellipsized), buttons right, all centered
+/// vertically. Used while the setup card needs the height.
+fn compact_layout(
+    ui: &Ui,
+    rect: Rect,
+    title: &str,
+    sub: &str,
+    (w1, w2): (f32, f32),
+) -> (Pos2, Pos2) {
+    let buttons_w = w1 + space::SM + w2;
+    let p = theme::palette(ui);
+    let inner = rect.shrink2(theme::v2(space::XL, 0.0));
+    let text_w = (inner.width() - buttons_w - space::LG).max(0.0);
+    let block = theme::typ::TITLE_SM.line + space::XS + theme::typ::CAPTION.line;
+    let top = rect.center().y - block / 2.0;
+    let t = ellipsize_end(ui, title, theme::typ::TITLE_SM, text_w);
+    paint_galley_v(
+        ui,
+        inner.left(),
+        top + theme::typ::TITLE_SM.line / 2.0,
+        galley(ui, &t, theme::typ::TITLE_SM),
+        p.text,
+    );
+    let s = ellipsize_end(ui, sub, theme::typ::CAPTION, text_w);
+    paint_galley_v(
+        ui,
+        inner.left(),
+        top + theme::typ::TITLE_SM.line + space::XS + theme::typ::CAPTION.line / 2.0,
+        galley(ui, &s, theme::typ::CAPTION),
+        p.text_muted,
+    );
+    let y = theme::snap4(rect.center().y - size::CONTROL / 2.0);
+    let x0 = inner.right() - buttons_w;
+    (egui::pos2(x0, y), egui::pos2(x0 + w1 + space::SM, y))
 }
 
 pub fn drop_zone(ui: &mut Ui, rect: Rect, state: DropState) -> (Response, DropResponse) {
@@ -97,48 +190,6 @@ pub fn drop_zone(ui: &mut Ui, rect: Rect, state: DropState) -> (Response, DropRe
             "Nothing is renamed until you review the plan.".to_string(),
         ),
     };
-    // Vertical stack: icon 48 · 16 · title 24 · 4 · caption 16 · 24 · buttons 32.
-    let block = size::ICON_XL
-        + space::LG
-        + theme::typ::TITLE_SM.line
-        + space::XS
-        + theme::typ::CAPTION.line
-        + space::XL
-        + size::CONTROL;
-    let mut y = theme::snap4(rect.center().y - block / 2.0);
-    let cx = rect.center().x;
-    let icon_c = if state == DropState::Invalid {
-        p.danger
-    } else {
-        p.text_muted
-    };
-    paint_icon(
-        ui,
-        egui::pos2(cx, y + size::ICON_XL / 2.0),
-        theme::icon::FILE_UP,
-        size::ICON_XL,
-        icon_c,
-    );
-    y += size::ICON_XL + space::LG;
-    let g = galley(ui, &title, theme::typ::TITLE_SM);
-    paint_galley_v(
-        ui,
-        cx - g.size().x / 2.0,
-        y + theme::typ::TITLE_SM.line / 2.0,
-        g,
-        p.text,
-    );
-    y += theme::typ::TITLE_SM.line + space::XS;
-    let g = galley(ui, &sub, theme::typ::CAPTION);
-    paint_galley_v(
-        ui,
-        cx - g.size().x / 2.0,
-        y + theme::typ::CAPTION.line / 2.0,
-        g,
-        p.text_muted,
-    );
-    y += theme::typ::CAPTION.line + space::XL;
-
     let b1 = Button::secondary("Choose files…")
         .icon(theme::icon::FILE_TEXT)
         .enabled(enabled)
@@ -147,12 +198,13 @@ pub fn drop_zone(ui: &mut Ui, rect: Rect, state: DropState) -> (Response, DropRe
         .icon(theme::icon::FOLDER_OPEN)
         .enabled(enabled);
     let (w1, w2) = (b1.width(ui), b2.width(ui));
-    let x0 = theme::snap4(cx - (w1 + space::SM + w2) / 2.0);
-    let r1 = Rect::from_min_size(egui::pos2(x0, y), theme::v2(w1, size::CONTROL));
-    let r2 = Rect::from_min_size(
-        egui::pos2(x0 + w1 + space::SM, y),
-        theme::v2(w2, size::CONTROL),
-    );
+    let (r1, r2) = if rect.height() < size::DROP_MIN_H {
+        compact_layout(ui, rect, &title, &sub, (w1, w2))
+    } else {
+        stacked_layout(ui, rect, &title, &sub, state, (w1, w2))
+    };
+    let r1 = Rect::from_min_size(r1, theme::v2(w1, size::CONTROL));
+    let r2 = Rect::from_min_size(r2, theme::v2(w2, size::CONTROL));
     let mut out = DropResponse {
         choose_files: b1.show_at(ui, r1).clicked(),
         choose_folder: b2.show_at(ui, r2).clicked(),

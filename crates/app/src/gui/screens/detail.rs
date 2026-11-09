@@ -116,7 +116,9 @@ fn body(ui: &mut Ui, m: &Model, i: usize, row: &Row, acts: &mut Vec<Action>) {
         .show_at(ui, b2)
         .clicked()
     {
-        acts.push(Action::OpenPath(row.source.clone()));
+        acts.push(Action::OpenPath(
+            row.current_path(&m.restored).to_path_buf(),
+        ));
     }
     if row.edited.is_some() && row.report.is_none() {
         ui.add_space(space::XS);

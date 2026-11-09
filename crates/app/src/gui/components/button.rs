@@ -2,7 +2,9 @@
 
 use egui::{Color32, Rect, Response, Sense, StrokeKind, Ui, WidgetInfo};
 
-use super::{anim, focus_ring, galley, mix, paint_galley_v, paint_icon, paint_spinner};
+use super::{
+    anim, ellipsize_end, focus_ring, galley, mix, paint_galley_v, paint_icon, paint_spinner,
+};
 use crate::gui::theme::{self, size, space, stroke};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +43,12 @@ pub struct Button<'a> {
     /// Two-state toggle (e.g. the details panel): AccessKit always reports
     /// the pressed state, on or off.
     toggle: bool,
+    /// Width cap: a longer label ends in "…" (full text in tooltip and
+    /// AccessKit label).
+    max_w: Option<f32>,
+    /// In the Tab order (default). Row actions opt out: the row keeps the
+    /// roving focus and shortcuts reach them.
+    tab: bool,
 }
 
 impl<'a> Button<'a> {
@@ -60,6 +68,8 @@ impl<'a> Button<'a> {
             id: None,
             active: false,
             toggle: false,
+            max_w: None,
+            tab: true,
         }
     }
 
@@ -133,6 +143,17 @@ impl<'a> Button<'a> {
         self
     }
 
+    pub fn max_width(mut self, w: f32) -> Self {
+        self.max_w = Some(w);
+        self
+    }
+
+    /// Clickable, but not a Tab stop (row actions, §8).
+    pub fn no_tab(mut self) -> Self {
+        self.tab = false;
+        self
+    }
+
     pub fn min_width(mut self, w: f32) -> Self {
         self.min_w = Some(w);
         self
@@ -171,7 +192,11 @@ impl<'a> Button<'a> {
         let w = (pad * 2.0 + icon + text)
             .max(min)
             .max(self.min_w.unwrap_or(0.0));
-        (w / theme::GRID4).ceil() * theme::GRID4
+        let w = (w / theme::GRID4).ceil() * theme::GRID4;
+        match self.max_w {
+            Some(m) if w > m => (m / theme::GRID4).floor() * theme::GRID4,
+            _ => w,
+        }
     }
 
     pub fn show(self, ui: &mut Ui) -> Response {
@@ -192,13 +217,17 @@ impl<'a> Button<'a> {
 
     fn sense(&self) -> Sense {
         if self.enabled && !self.loading {
-            Sense::click()
+            if self.tab {
+                Sense::click()
+            } else {
+                Sense::CLICK
+            }
         } else {
             Sense::hover()
         }
     }
 
-    fn paint(self, ui: &mut Ui, rect: Rect, resp: Response) -> Response {
+    fn paint(mut self, ui: &mut Ui, rect: Rect, resp: Response) -> Response {
         let p = theme::palette(ui);
         let hover = anim(ui, resp.id.with("h"), self.enabled && resp.hovered());
         let pressed = self.enabled && resp.is_pointer_button_down_on();
@@ -273,8 +302,24 @@ impl<'a> Button<'a> {
                     }
                 }
             } else {
-                let g = galley(ui, self.label, theme::typ::BODY_STRONG);
                 let has_icon = self.icon.is_some() || self.loading;
+                let pad = if self.size == BSize::Lg {
+                    space::LG
+                } else {
+                    space::MD
+                };
+                let room = rect.width()
+                    - pad * 2.0
+                    - if has_icon {
+                        size::ICON + space::SM
+                    } else {
+                        0.0
+                    };
+                let shown = ellipsize_end(ui, self.label, theme::typ::BODY_STRONG, room);
+                if shown != self.label && self.tooltip.is_none() {
+                    self.tooltip = Some(self.label.to_string());
+                }
+                let g = galley(ui, &shown, theme::typ::BODY_STRONG);
                 let content = g.size().x
                     + if has_icon {
                         size::ICON + space::SM

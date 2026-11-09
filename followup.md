@@ -17,7 +17,6 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 Queued by the owner on 2026-11-08, in this order.
 
-- **F3 GUI fine-tune**: spacing/alignment pass over every screen; the drop zone grows with window height but not width and looks unbalanced (`gui/screens/empty.rs`, `components/drop_zone.rs`).
 - **F4 Release prep**: audit open aspects; final Linux build (AppImage/deb/pacman) + binary; Windows build and Azure Artifact Signing in the VM (`cargo xtask sign` mirrors electron-workspace: signtool `/dlib Azure.CodeSigning.Dlib.dll /dmdf metadata.json`, timestamp `http://timestamp.acs.microsoft.com`; VM needs Windows SDK signtool, Artifact Signing Client Tools, `metadata.json`, an Azure login); macOS build + notarization on a separate Mac (written guidance).
 
 ## Validation gaps

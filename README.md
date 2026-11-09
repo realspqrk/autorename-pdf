@@ -23,7 +23,7 @@ Download from [Releases](https://github.com/realspqrk/autorename-pdf/releases). 
 
 | System | Download | Install |
 |---|---|---|
-| Windows 10/11 | `AutoRename-PDF_<ver>_x64-setup.exe` | Double-click. No admin rights needed. |
+| Windows 10/11 | [Download for Windows](https://github.com/realspqrk/autorename-pdf/releases/latest) (`AutoRename-PDF_<ver>_x64-setup.exe`) | On the release page, choose the file ending in `_x64-setup.exe`. Double-click it; no admin rights needed. When it's installed, open AutoRename-PDF from the Start menu. |
 | Linux (any distro) | `autorename-pdf_<ver>_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
 | Debian / Ubuntu | `autorename-pdf_<ver>_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
 | Arch | `autorename-pdf_<ver>_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
@@ -33,16 +33,16 @@ On Linux, run `integrate install` once for the menu entry and the right-click en
 
 ## Rename your first PDFs
 
-1. **Open AutoRename-PDF.** The first time, a setup card asks how documents are read. Choose **Cloud provider**, paste your API key, enter your company name and click **Save and continue**. An API key is an access code from your AI provider, which bills you for use. To start, create one at [OpenAI](https://platform.openai.com/api-keys). Prefer to keep everything on your computer? Install [Ollama](https://ollama.com) and download a model first ([offline checklist](docs/guide.md#offline-mode)), then choose **Offline on this computer**.
+1. **Open AutoRename-PDF.** The first time, a setup card asks how documents are read. Choose **Cloud provider**, paste your API key, click **Test connection**, enter your company name and click **Save and continue**. An API key is an access code from your AI provider, which charges per use; use a key from your company's account. **Get a key** next to the field opens your provider's key page (OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)). Prefer to keep everything on your computer? Install [Ollama](https://ollama.com) and download a model first ([offline checklist](docs/guide.md#offline-mode)), then choose **Offline on this computer**.
 2. **Drop PDFs or folders** into the window.
-3. **Check the proposed names.** Double-click a name (or press F2) to change it. Press **Rename**.
+3. **Check the proposed names.** Files that need a look have **Open** to compare with the original PDF. To change a name, click the pencil (or double-click the name, or press F2). Press **Rename**.
 4. Changed your mind? **Undo rename** on the result screen, or later under **History**.
 
 Also on the right-click menu of PDFs and folders: **AutoRename-PDF > Rename now** (renames straight away unless something needs a look) or **Preview** (Windows 11: under "Show more options").
 
 Your company name tells bills you receive (`AP`) from invoices you send (`AR`); change it under Settings (gear icon) > Naming. To see why a name was chosen, open the details panel (button at the right of the header, or <kbd>Ctrl</kbd>+<kbd>\</kbd>).
 
-**Privacy in plain words:** text is read on your computer first. With the default settings, the text of the first three pages goes to the AI provider you chose; page images are sent only when the text cannot be read locally. You can change both in Settings. In offline mode documents stay on your computer or local network. [More](docs/guide.md#how-a-pdf-is-read).
+**Privacy in plain words:** text is read on your computer first. With the default settings, the text of the first three pages goes to the AI provider you chose; page images are sent only when the text cannot be read locally. You can change both in Settings (gear icon) > Processing. In offline mode documents stay on your computer or local network. [More](docs/guide.md#how-a-pdf-is-read).
 
 ## Command line in 60 seconds
 
@@ -93,7 +93,7 @@ Any PDF tool can read the attachment too (qpdf, pdfdetach: [examples](docs/guide
 
 ## Keep company names consistent
 
-The app remembers each company the first time you rename a PDF from it and reuses that spelling. After that first rename, choose your preferred spelling in the Companies tab or with the command below ([full walkthrough](docs/guide.md#name-matching)):
+The app remembers each company the first time you rename a PDF from it and reuses that spelling. In the Companies tab: if the same company appears twice, select the spelling you don't want, choose **Merge into**, and pick the name to keep. To change one company's spelling, choose **Rename**. Existing file names stay as they are; future documents use the new name. On the command line ([full walkthrough](docs/guide.md#name-matching)):
 
 ```console
 $ autorename-pdf names rename "ACME Corporation" ACME

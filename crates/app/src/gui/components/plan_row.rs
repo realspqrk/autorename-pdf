@@ -1,5 +1,7 @@
 //! §4.3 PlanRow: 56 h, padding 8/16, checkbox · status icon · two filename
-//! lines · Try again on errors. No badges. One AccessKit ListItem.
+//! lines · one row action (Try again on errors, Open on rows that need a
+//! look) · Edit name on the active/hovered row. No badges. One AccessKit
+//! ListItem.
 
 use egui::{Rect, Response, Sense, Ui, WidgetInfo};
 
@@ -51,6 +53,10 @@ pub struct RowView<'a> {
     pub selected: bool,
     pub edited: bool,
     pub retry: bool,
+    /// "Open" (the original PDF) on rows that need a look.
+    pub open: bool,
+    /// Edit-name button while the row is active or hovered.
+    pub editable: bool,
     pub read_only: bool,
     /// Only the active row is in the Tab order; arrows move between rows.
     pub focusable: bool,
@@ -63,6 +69,8 @@ pub struct RowResponse {
     pub double_clicked: bool,
     pub toggled: bool,
     pub retry: bool,
+    pub open: bool,
+    pub edit: bool,
     pub focused: bool,
     pub rect: Option<Rect>,
     pub row: Option<Response>,
@@ -188,29 +196,70 @@ impl PlanRow {
             ),
         }
 
-        // Right edge (right − 16): Try again on retryable errors.
+        // Right edge (right − 16), one action at most: Try again on
+        // retryable errors, else Open on rows that need a look; then the
+        // Edit-name pencil while the row is active or hovered.
         let mut right = rect.right() - space::LG;
-        if v.retry {
-            let b = Button::ghost("Try again")
-                .icon(theme::icon::ROTATE_CCW)
-                .size(BSize::Sm);
-            let w = b.width(ui);
-            let r = Rect::from_min_size(
+        let place = |right: f32, w: f32| {
+            Rect::from_min_size(
                 egui::pos2(
                     ((right - w) / theme::GRID4).floor() * theme::GRID4,
                     l1y - size::CONTROL_SM / 2.0,
                 ),
                 theme::v2(w, size::CONTROL_SM),
-            );
+            )
+        };
+        if v.retry {
+            let b = Button::ghost("Try again")
+                .icon(theme::icon::ROTATE_CCW)
+                .size(BSize::Sm);
+            let r = place(right, b.width(ui));
             let a = format!("Try again {}", v.old_name);
-            out.retry = b.a11y(a).show_at(ui, r).clicked();
-            right = r.left() - space::MD;
+            out.retry = b
+                .a11y(a)
+                .id(v.id.with("retry"))
+                .no_tab()
+                .show_at(ui, r)
+                .clicked();
+            right = r.left() - space::SM;
+        } else if v.open {
+            let b = Button::ghost("Open")
+                .icon(theme::icon::EXTERNAL_LINK)
+                .size(BSize::Sm)
+                .tooltip("Open the original PDF to check it (O)");
+            let r = place(right, b.width(ui));
+            let a = format!("Open {}", v.old_name);
+            out.open = b
+                .a11y(a)
+                .id(v.id.with("open"))
+                .no_tab()
+                .show_at(ui, r)
+                .clicked();
+            right = r.left() - space::SM;
+        }
+        let show_edit = v.editable && (v.selected || ui.rect_contains_pointer(rect));
+        if show_edit {
+            let r = place(right, size::CONTROL_SM);
+            let a = format!("Edit name of {}", v.old_name);
+            out.edit = Button::icon_only(theme::icon::PENCIL, "Edit name (F2)")
+                .a11y(a)
+                .size(BSize::Sm)
+                .id(v.id.with("edit"))
+                .no_tab()
+                .show_at(ui, r)
+                .clicked();
+            right = r.left() - space::SM;
+        }
+        if v.retry || v.open || show_edit {
+            right -= space::XS;
         }
 
         // Line 1: up to Try again; filenames use a middle ellipsis.
         let x = rect.left() + TEXT_X;
         let mut max_w = (right - x).max(0.0);
-        if v.edited {
+        // The edited marker gives way to the Edit-name button (one pencil).
+        let marker = v.edited && !show_edit;
+        if marker {
             max_w -= size::ICON + space::SM;
         }
         let (t1, c1) = match v.status {
@@ -229,7 +278,7 @@ impl PlanRow {
             ellipsize_end(ui, v.line1, t1, max_w)
         };
         let r1 = paint_text(ui, x, l1y, &shown, t1, c1);
-        if v.edited {
+        if marker {
             paint_icon(
                 ui,
                 egui::pos2(r1.right() + space::SM + size::ICON / 2.0, l1y),

@@ -1,5 +1,6 @@
 //! §4.2 Empty / onboarding: drop zone (+ "Set up AI" card on first run).
-//! The page scrolls when the card does not fit (960 × 640); fields never shrink.
+//! While the card is shown and the full drop zone does not fit, the drop
+//! zone turns compact; the page scrolls only when even that does not fit.
 
 use egui::{Rect, Sense, Ui};
 
@@ -18,12 +19,13 @@ use crate::gui::theme::{self, Tone, size, space, typ};
 fn card_h(offline: bool, company: bool) -> f32 {
     let head = space::XL + typ::TITLE_SM.line + space::XS + typ::BODY.line + space::LG;
     let seg = size::CONTROL + space::LG;
-    // Captions under the first row: offline = server helper + model
-    // status (4 + 16 + 16), cloud = model helper (4 + 16).
+    // Captions: offline = server helper + model status under the first row
+    // (4 + 16 + 16); cloud = model helper under the first row and the key
+    // helper with "Get a key" under the key row (2 × (4 + 16)).
     let caption = if offline {
         space::XS + typ::CAPTION.line * 2.0
     } else {
-        space::XS + typ::CAPTION.line
+        (space::XS + typ::CAPTION.line) * 2.0
     };
     let body = size::CONTROL + caption + space::LG + size::CONTROL;
     // Company: stacked label, field, helper.
@@ -40,37 +42,61 @@ fn card_h(offline: bool, company: bool) -> f32 {
     head + seg + body + company + space::XL + size::CONTROL + space::XL
 }
 
+/// Configured drop zone (§4.2): width = φ share of the content clamped to
+/// [`CARD_W`, `DROP_MAX_W`], height = width × `DROP_ASPECT` (at least
+/// `DROP_MIN_H`, at most the free height), on the 8-pt grid.
+fn drop_size(rect: Rect, free_h: f32) -> egui::Vec2 {
+    let grid8 = |v: f32| (v / theme::GRID8).floor() * theme::GRID8;
+    let w = grid8(rect.width() * size::DROP_W_SHARE)
+        .clamp(size::CARD_W, size::DROP_MAX_W)
+        .min(rect.width() - space::XL * 2.0);
+    let h = grid8(w * size::DROP_ASPECT)
+        .min(grid8(free_h))
+        .max(size::DROP_MIN_H);
+    theme::v2(w, h)
+}
+
 pub fn empty(ui: &mut Ui, rect: Rect, m: &mut Model, drop: DropState, acts: &mut Vec<Action>) {
     let show_card = !m.is_set_up();
-    let w = size::CARD_W.min(rect.width() - space::XL * 2.0);
     let hint = ocr_hint_pack(m, show_card);
-    let hint_h = if hint.is_some() {
-        space::XL + ocr_hint_h(ui, w, &ocr_hint_body(m))
-    } else {
-        0.0
-    };
     if !show_card {
-        let x = theme::snap4(rect.center().x - w / 2.0);
-        let h = (rect.height() - space::XL * 2.0 - hint_h).max(size::DROP_MIN_H);
-        let r = Rect::from_min_size(egui::pos2(x, rect.top() + space::XL), theme::v2(w, h));
+        // Drop zone + hint as one group, centered in the content area.
+        let probe_w = drop_size(rect, f32::INFINITY).x;
+        let hint_h = if hint.is_some() {
+            space::XL + ocr_hint_h(ui, probe_w, &ocr_hint_body(m))
+        } else {
+            0.0
+        };
+        let dz = drop_size(rect, rect.height() - space::XL * 2.0 - hint_h);
+        let group = dz.y + hint_h;
+        let x = theme::snap4(rect.center().x - dz.x / 2.0);
+        let top = theme::snap4(rect.top() + ((rect.height() - group) / 2.0).max(space::XL));
+        let r = Rect::from_min_size(egui::pos2(x, top), dz);
         let (_, out) = drop_zone(ui, r, drop);
         push_drop(out, acts);
         if let Some(pack) = hint {
             let hr = Rect::from_min_size(
                 egui::pos2(x, r.bottom() + space::XL),
-                theme::v2(w, hint_h - space::XL),
+                theme::v2(dz.x, hint_h - space::XL),
             );
             ocr_hint(ui, hr, m, pack, acts);
         }
         return;
     }
-    let ch = card_h(m.setup.offline, asks_company(m)) + hint_h;
-    let total = space::XL + size::DROP_H + space::XL + ch + space::XL;
-    let drop_h = if rect.height() >= total {
-        size::DROP_H
+    let w = size::CARD_W.min(rect.width() - space::XL * 2.0);
+    let hint_h = if hint.is_some() {
+        space::XL + ocr_hint_h(ui, w, &ocr_hint_body(m))
     } else {
-        // Shrink the drop zone to its minimum first, then scroll.
-        (rect.height() - (total - size::DROP_H)).clamp(size::DROP_MIN_H, size::DROP_H)
+        0.0
+    };
+    let ch = card_h(m.setup.offline, asks_company(m)) + hint_h;
+    // Full drop zone (240–280) while everything fits; otherwise the compact
+    // one-row form so the card and its actions stay in view (§4.2).
+    let free = rect.height() - space::XL * 3.0 - ch;
+    let drop_h = if free >= size::DROP_MIN_H {
+        (free.min(size::DROP_H) / theme::GRID4).floor() * theme::GRID4
+    } else {
+        size::DROP_COMPACT_H
     };
     let content_h = space::XL + drop_h + space::XL + ch + space::XL;
     in_rect(ui, rect, |ui| {
@@ -107,23 +133,20 @@ pub fn empty(ui: &mut Ui, rect: Rect, m: &mut Model, drop: DropState, acts: &mut
 
 const OCR_HINT_TITLE: &str = "Read scans on this computer (optional)";
 
-/// Recommendation body for the configured route: where pages that need
-/// image reading go today (the provider, or nowhere with vision off);
-/// neutral before setup.
+/// Recommendation body for the configured route: scans are read here
+/// first, but the text still goes to the provider (cloud); with vision off
+/// scans can't be read at all. Before setup: the provider picked on the card.
 pub fn ocr_hint_body(m: &Model) -> String {
     use autorename_core::config::Toggle;
-    let Some(s) = m.config.settings.as_ref() else {
-        return "Reads scanned text on this computer before using AI image reading.".into();
+    let provider = match m.config.settings.as_ref() {
+        Some(s) if s.pdf.vision == Toggle::Off => {
+            return "Scans can't be read with your current settings. Download the scan reader or enable AI image reading in Processing settings.".into();
+        }
+        Some(s) => crate::gui::model::provider_label(s.ai.provider.id()),
+        None => PROVIDERS[m.setup.provider].1,
     };
-    if s.pdf.vision == Toggle::Off {
-        return "Scans can't be read with your current settings. Download the scan reader or enable AI image reading in Processing settings.".into();
-    }
-    let provider = PROVIDERS
-        .iter()
-        .find(|p| p.0 == s.ai.provider.id())
-        .map_or("your AI provider", |p| p.1);
     format!(
-        "Pages that need image reading are sent to {provider}. Download the scan reader to read scans on this computer first."
+        "Reads scans on this computer first. The text is still sent to {provider} to suggest the name."
     )
 }
 
@@ -408,7 +431,8 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
             ui.add_space(space::XS);
             caption_line(ui, MODEL_HELPER, p.text_muted);
             ui.add_space(space::LG);
-            let var = crate::gui::model::key_var(PROVIDERS[m.setup.provider].0);
+            let (pid, pname) = PROVIDERS[m.setup.provider];
+            let var = crate::gui::model::key_var(pid);
             let found = std::env::var(var).is_ok() || m.config.env.contains_key(var);
             row(ui, "API key", |ui| {
                 let shown = &mut m.setup.show_key;
@@ -436,10 +460,16 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
                         format!("Found in {var}"),
                     )
                 } else {
-                    (Tone::Danger, theme::icon::CIRCLE_X, "Missing".to_string())
+                    (
+                        Tone::Danger,
+                        theme::icon::CIRCLE_X,
+                        format!("Add your {pname} API key"),
+                    )
                 };
                 status(ui, tone, icon, &text);
             });
+            ui.add_space(space::XS);
+            key_helper(ui, pname, crate::gui::model::key_url(pid), acts);
         }
         // Your company (§4.2): optional, only for profiles with `direction`;
         // same copy as Settings › Naming.
@@ -479,22 +509,58 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
     });
     let fb = Rect::from_min_max(bar.min, egui::pos2(left_edge - space::MD, bar.bottom()));
     let feedback = if let Some(e) = &m.setup.error {
-        Some((Tone::Danger, e.clone()))
+        Some((Tone::Danger, tone_icon(Tone::Danger), e.clone()))
     } else if m.setup.offline {
         None
     } else {
         match &m.setup_test {
-            Some(Ok(ms)) => Some((Tone::Success, format!("Connected · {ms} ms"))),
-            Some(Err(e)) => Some((Tone::Danger, e.clone())),
-            None => None,
+            Some(Ok(ms)) => Some((
+                Tone::Success,
+                tone_icon(Tone::Success),
+                format!("Connected · {ms} ms"),
+            )),
+            Some(Err(e)) => Some((Tone::Danger, tone_icon(Tone::Danger), e.clone())),
+            // The order of the two steps, until the first test.
+            None => Some((
+                Tone::Neutral,
+                theme::icon::INFO,
+                "Paste your key, then click Test connection.".to_string(),
+            )),
         }
     };
-    if let Some((tone, text)) = feedback {
+    if let Some((tone, icon, text)) = feedback {
         in_rect(ui, fb, |ui| {
-            status(ui, tone, tone_icon(tone), &text);
+            status(ui, tone, icon, &text);
         });
     }
 }
+
+/// Key helper under the API key field (aligned with the fields): who pays,
+/// whose account, and the provider's key page.
+fn key_helper(ui: &mut Ui, provider: &str, url: Option<&str>, acts: &mut Vec<Action>) {
+    let p = theme::palette(ui);
+    let (cr, _) = ui.allocate_exact_size(
+        theme::v2(ui.available_width(), typ::CAPTION.line),
+        Sense::hover(),
+    );
+    let x = cr.left() + size::SETUP_LABEL_COL + space::SM;
+    let text = format!("Use a key from your company's account. {provider} charges per use.");
+    let link_w = url.map_or(0.0, |_| {
+        crate::gui::components::text_width(ui, KEY_LINK, typ::CAPTION) + space::SM
+    });
+    let t = ellipsize_end(ui, &text, typ::CAPTION, cr.right() - x - link_w);
+    let tr = paint_text(ui, x, cr.center().y, &t, typ::CAPTION, p.text_muted);
+    if let Some(url) = url {
+        let lx = theme::snap4(tr.right() + space::SM);
+        if crate::gui::components::link_at(ui, lx, cr.center().y, KEY_LINK, typ::CAPTION, url)
+            .clicked()
+        {
+            acts.push(Action::OpenUrl(url.to_string()));
+        }
+    }
+}
+
+const KEY_LINK: &str = "Get a key";
 
 const COMPANY_HELPER: &str =
     "Helps tell bills you receive from invoices you send. You can add it later in Settings.";

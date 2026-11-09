@@ -60,6 +60,13 @@ pub mod size {
     pub const CARD_W: f32 = 640.0;
     pub const DROP_MIN_H: f32 = 240.0;
     pub const DROP_H: f32 = 280.0;
+    /// §4.2 configured drop zone: width share of the content (φ minor
+    /// complement), max width, height = width × aspect.
+    pub const DROP_W_SHARE: f32 = 0.618;
+    pub const DROP_MAX_W: f32 = 960.0;
+    pub const DROP_ASPECT: f32 = 0.5;
+    /// §5.10 compact one-row drop zone (setup card at short heights).
+    pub const DROP_COMPACT_H: f32 = 80.0;
     /// §2.3 max prose measure.
     pub const PROSE_MAX: f32 = 560.0;
     /// §3 settings nav and form column.

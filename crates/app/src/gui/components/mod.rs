@@ -293,6 +293,32 @@ pub fn section_header(ui: &mut Ui, title: &str) {
     }
 }
 
+/// Inline text link: `accent_text`, underlined on hover, 24 px hit height
+/// centered on the text line (`cy`), role Link, URL in the tooltip.
+pub fn link_at(ui: &Ui, x: f32, cy: f32, text: &str, t: Type, url: &str) -> Response {
+    let p = theme::palette(ui);
+    let g = galley(ui, text, t);
+    let r = Rect::from_min_size(
+        egui::pos2(x, cy - theme::size::CONTROL_SM / 2.0),
+        theme::v2(ceil4(g.size().x), theme::size::CONTROL_SM),
+    );
+    let resp = ui
+        .interact(r, ui.scope_id().with(("link", text)), Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(url);
+    let tr = paint_galley_v(ui, x, cy, g, p.accent_text);
+    if resp.hovered() || resp.has_focus() {
+        ui.painter().hline(
+            tr.x_range(),
+            tr.bottom().round() - 0.5,
+            theme::hairline(p.accent_text),
+        );
+    }
+    focus_ring(ui, &resp, r, theme::radius::SM, false);
+    resp.widget_info(|| WidgetInfo::labeled(egui::Role::Link, true, text));
+    resp
+}
+
 /// Fixed-height single-line label (line height from the type token).
 pub fn label(ui: &mut Ui, text: &str, t: Type, color: Color32) -> Response {
     let g = galley(ui, text, t);

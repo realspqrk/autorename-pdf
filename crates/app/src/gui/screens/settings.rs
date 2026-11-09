@@ -887,11 +887,18 @@ fn reading(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
         "Read scans on this computer",
         ocr_status(f.ocr, models, f.vision != 2, downloading),
     );
+    // Local reading does not make a cloud setup private: say where the
+    // text goes next.
+    let ocr_help = if f.offline {
+        "Text recognition (OCR) reads scanned pages on this computer.".to_string()
+    } else {
+        format!(
+            "Text recognition (OCR) reads scanned pages on this computer. The text is still sent to {} to suggest the name.",
+            PROVIDERS[f.provider.min(4)].1
+        )
+    };
     step_body(ui, |ui| {
-        helper(
-            ui,
-            "Text recognition (OCR) reads scanned pages without sending them anywhere.",
-        );
+        helper(ui, &ocr_help);
         ui.add_space(space::SM);
         segmented(
             ui,
@@ -1867,8 +1874,8 @@ fn about(ui: &mut Ui, acts: &mut Vec<Action>) {
     );
     ui.add_space(space::XL);
     para(ui, LICENSE_LINE, p.text);
-    ui.add_space(space::SM);
-    if Button::ghost("View license")
+    ui.add_space(space::LG);
+    if Button::secondary("View license")
         .icon(theme::icon::FILE_TEXT)
         .show(ui)
         .clicked()
@@ -1917,8 +1924,8 @@ fn about(ui: &mut Ui, acts: &mut Vec<Action>) {
     });
     ui.add_space(space::XL);
     caption(ui, THIRD_PARTY, p.text_muted);
-    ui.add_space(space::SM);
-    if Button::ghost("Third-party notices")
+    ui.add_space(space::LG);
+    if Button::secondary("Third-party notices")
         .icon(theme::icon::FILE_TEXT)
         .show(ui)
         .clicked()

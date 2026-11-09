@@ -88,6 +88,13 @@ fn screens() -> Vec<Screen> {
             demo::companies_user_spelling_model,
         ),
         ("companies_merge", demo::merge_model),
+        ("companies_merge_picked", || {
+            let mut m = demo::merge_model();
+            if let Some(md) = m.companies.merge.as_mut() {
+                md.target = Some("Telekom Austria".into());
+            }
+            m
+        }),
         ("history", demo::history_model),
     ]
 }
@@ -112,6 +119,31 @@ fn snapshots() {
                 results.add(h.try_snapshot(snap_name(name, size, dark)));
             }
         }
+    }
+    results.unwrap();
+}
+
+/// README screenshots (`docs/images/gui-preview-{light,dark}.png`): the
+/// simple preview at 1280 × 800, details closed. Refreshed with the other
+/// snapshots (`UPDATE_SNAPSHOTS=force`), so the README never shows an old UI.
+#[test]
+fn readme_screenshots() {
+    let _gpu = gpu_lock();
+    let mut results = SnapshotResults::new();
+    for dark in [false, true] {
+        // 11 rows fill the list exactly: no row cut above the action bar.
+        let mut h = harness(
+            || {
+                let mut m = demo::preview_model();
+                m.rows.pop();
+                m
+            },
+            SIZES[0],
+            dark,
+        );
+        let opts = SnapshotOptions::new().output_path("../../docs/images");
+        let name = format!("gui-preview-{}", if dark { "dark" } else { "light" });
+        results.add(h.try_snapshot_options(name, &opts));
     }
     results.unwrap();
 }
@@ -443,6 +475,44 @@ fn keyboard_tab_order_and_enter_on_rename() {
     let _gpu = gpu_lock();
     let mut h = harness(demo::preview_details_model, SIZES[0], false);
     let order = tab_to(&mut h, |l| l == "Rename 10 files");
+    // The full traversal: the list is one stop (the active row); row
+    // actions (Try again, Open, Edit name) are not Tab stops (§8).
+    let stops: Vec<&str> = order
+        .iter()
+        .map(|l| {
+            if l.contains("will be renamed to") {
+                "ROW"
+            } else {
+                l.as_str()
+            }
+        })
+        .collect();
+    assert_eq!(
+        stops,
+        [
+            "Rename",
+            "Companies, 3 need a look",
+            "History",
+            "Settings",
+            "Hide details",
+            "Add files…",
+            "All 12",
+            "Needs a look 3",
+            "Resize detail pane",
+            "ROW",
+            "Edit proposed name",
+            "Copy original path",
+            "Open file",
+            "Fields section, expanded",
+            "Company match section, expanded",
+            "Don't learn",
+            "Metadata section, expanded",
+            "Extraction section, expanded",
+            "Show all",
+            "Warnings section, expanded",
+            "Rename 10 files",
+        ]
+    );
     let pos = |needle: &str| {
         order
             .iter()
@@ -672,6 +742,8 @@ fn copy_lint() {
                     "Müller",
                     "Bau",
                     "Sponsors",
+                    // File names in row-action labels ("Open Rechnung (2).pdf").
+                    "Rechnung",
                 ]
                 .iter()
                 .any(|p| w.trim_matches(|c: char| !c.is_alphanumeric()) == *p);
@@ -1336,6 +1408,290 @@ fn detail_quality_caption_names_what_was_measured() {
     );
 }
 
+/// Onboarding at every window size, cloud and offline: the setup card's
+/// actions are in view without scrolling (compact drop zone, §4.2).
+#[test]
+fn setup_actions_visible_without_scrolling() {
+    let _gpu = gpu_lock();
+    let models: [fn() -> Model; 2] = [demo::empty_model, demo::offline_setup_model];
+    for model in models {
+        for size in SIZES {
+            let h = harness(model, size, false);
+            let window = Rect::from_min_size(egui::Pos2::ZERO, theme::v2(size.0, size.1));
+            for l in ["Test connection", "Save and continue", "Choose files…"] {
+                let r = h.get_by_label(l).rect();
+                assert!(window.contains_rect(r), "{l} at {size:?}: {r:?}");
+            }
+        }
+    }
+}
+
+/// The Done card accounts for every file of the plan: 12 files, 10 renamed,
+/// one not selected and one that couldn't be read (§4.6).
+#[test]
+fn done_caption_accounts_for_every_file() {
+    use super::screens::preview::done_summary;
+    let d = done_summary(&demo::done_model()).expect("summary");
+    assert_eq!(d.title, "Renamed 10 files");
+    assert!(
+        d.line.starts_with("1 not selected · 1 couldn't be read"),
+        "{}",
+        d.line
+    );
+}
+
+/// Done: O opens the renamed file; after an undo that restored it, the
+/// original again; a file whose restore failed stays at its new name.
+#[test]
+fn open_uses_the_current_path_after_rename_and_undo() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::done_model, SIZES[0], false);
+    let rows = h.state().m.rows.clone();
+    let target = |i: usize| {
+        rows[i]
+            .report
+            .as_ref()
+            .and_then(|r| r.target.clone())
+            .unwrap()
+    };
+    assert_ne!(target(0), rows[0].source);
+    h.key_press(Key::O);
+    h.run();
+    assert_eq!(h.state().opened().last(), Some(&target(0)));
+    // Partial undo: row 0 restored, row 1 failed.
+    h.state_mut().m.restored.insert(target(0));
+    h.state_mut().m.undone = true;
+    h.key_press(Key::O);
+    h.run();
+    assert_eq!(h.state().opened().last(), Some(&rows[0].source));
+    let m = &h.state().m;
+    assert_eq!(m.rows[1].current_path(&m.restored), target(1).as_path());
+}
+
+/// The vision-fallback sentence only when the AI answered; a failed AI
+/// call with the same extraction keeps the failure copy.
+#[test]
+fn vision_fallback_copy_needs_a_successful_ai_answer() {
+    let m = demo::preview_model();
+    let row = m
+        .rows
+        .iter()
+        .find(|r| {
+            r.item.as_ref().is_some_and(|i| {
+                i.tier == Some(autorename_core::extract::Tier::VisionNeeded)
+                    && i.warnings.iter().any(|w| w == "OCR returned no text")
+            })
+        })
+        .expect("vision row in the demo")
+        .clone();
+    assert_eq!(
+        row.problem("company").as_deref(),
+        Some(
+            "The local scan reader couldn't read this page. AI read its image; compare the name with the original."
+        )
+    );
+    let mut failed = row;
+    if let Some(i) = failed.item.as_mut() {
+        i.error = Some(autorename_core::pipeline::ErrorInfo {
+            code: "provider_error".into(),
+            message: "timeout".into(),
+            hint: None,
+            retryable: true,
+        });
+    }
+    let p = failed.problem("company").unwrap_or_default();
+    assert!(!p.contains("AI read its image"), "{p}");
+}
+
+/// Stop during analysis, then rename the analyzed subset: files never
+/// reached are "not analyzed", not "couldn't be read"; the total holds.
+#[test]
+fn done_caption_after_stop_counts_not_analyzed_files() {
+    use super::screens::preview::done_summary;
+    let mut m = demo::preview_model();
+    let mut r = super::model::Row::queued(std::path::PathBuf::from("/home/demo/Scans/late.pdf"));
+    r.not_analyzed = true;
+    m.rows.push(r);
+    let rep = demo::simulate_apply(&m);
+    m.apply_report(rep);
+    let d = done_summary(&m).expect("summary");
+    assert_eq!(d.title, "Renamed 10 files");
+    assert!(
+        d.line
+            .starts_with("1 not selected · 1 couldn't be read · 1 not analyzed"),
+        "{}",
+        d.line
+    );
+    let left = m.left_out;
+    assert_eq!(
+        m.report.as_ref().unwrap().summary.total
+            + left.not_selected
+            + left.unread
+            + left.not_analyzed,
+        13
+    );
+}
+
+/// Rows that need a look offer Open (the original PDF); the active row
+/// offers Edit name, which starts the inline edit (§4.3).
+#[test]
+fn row_actions_open_and_edit_name() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    assert!(
+        h.query_by_label("Open Rechnung (2).pdf").is_some(),
+        "needs a look"
+    );
+    assert!(
+        h.query_by_label("Open scan_0041.pdf").is_none(),
+        "ready row"
+    );
+    assert!(
+        h.query_by_label("Open broken.pdf").is_none(),
+        "Try again instead"
+    );
+    assert!(
+        h.query_by_label("Edit name of scan_0041.pdf").is_none(),
+        "not active"
+    );
+    // Open goes through the worker (no launch on the UI thread).
+    h.get_by_label("Open Rechnung (2).pdf").click();
+    h.run();
+    let src = h.state().m.rows[1].source.clone();
+    assert_eq!(h.state().opened(), std::slice::from_ref(&src));
+    // O on the active row opens it too (the button is not a Tab stop).
+    tab_to(&mut h, |l| l.contains("Rechnung (2).pdf, "));
+    h.key_press(Key::O);
+    h.run();
+    assert_eq!(h.state().opened(), [src.clone(), src]);
+    h.get_by_label("Edit name of Rechnung (2).pdf").click();
+    h.run();
+    assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(1));
+}
+
+/// Equal file names in different folders: row actions keep distinct ids
+/// (they derive from the row id, not the label).
+#[test]
+fn row_actions_with_equal_names_in_two_folders() {
+    let _gpu = gpu_lock();
+    let mut h = harness(
+        || {
+            let mut m = demo::preview_model();
+            let mut twin = m.rows[1].clone();
+            twin.source = std::path::PathBuf::from("/home/demo/Other/Rechnung (2).pdf");
+            m.rows.insert(2, twin);
+            m
+        },
+        SIZES[0],
+        false,
+    );
+    h.run();
+    assert_eq!(h.query_all_by_label("Open Rechnung (2).pdf").count(), 2);
+    let r = h
+        .query_all_by_label("Open Rechnung (2).pdf")
+        .nth(1)
+        .unwrap()
+        .rect();
+    h.hover_at(r.center());
+    h.run();
+    assert_eq!(
+        h.query_all_by_label("Edit name of Rechnung (2).pdf")
+            .count(),
+        2,
+        "active and hovered twin"
+    );
+    h.query_all_by_label("Open Rechnung (2).pdf")
+        .nth(1)
+        .unwrap()
+        .click();
+    h.run();
+    assert_eq!(
+        h.state().opened(),
+        [std::path::PathBuf::from(
+            "/home/demo/Other/Rechnung (2).pdf"
+        )]
+    );
+}
+
+/// A viewer that can't be started is reported, not swallowed.
+#[test]
+fn open_failure_shows_a_banner() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    h.state().worker_send(super::worker::Msg::OpenFailed(
+        std::path::PathBuf::from("/x/Rechnung (2).pdf"),
+        "No such program".into(),
+    ));
+    h.run();
+    assert!(
+        h.state()
+            .m
+            .banners
+            .iter()
+            .any(|b| b.title == "Couldn't open Rechnung (2).pdf.")
+    );
+}
+
+const LONG_NAME: &str = "International Association for Scientific Research and Development of Advanced Information Technology GmbH";
+
+fn long_merge_model() -> Model {
+    let mut m = demo::merge_model();
+    if let Some(db) = m.companies.db.as_mut()
+        && let Some(e) = db
+            .entries
+            .iter_mut()
+            .find(|e| e.canonical == "Telekom Austria")
+    {
+        e.canonical = LONG_NAME.into();
+    }
+    if let Some(md) = m.companies.merge.as_mut() {
+        md.target = Some(LONG_NAME.into());
+    }
+    m
+}
+
+/// Merge into a very long name: the button ends in "…" and Cancel stays
+/// inside the 960 × 640 window.
+#[test]
+fn merge_button_fits_with_a_long_target() {
+    let _gpu = gpu_lock();
+    let h = harness(long_merge_model, SIZES[1], false);
+    let window = Rect::from_min_size(egui::Pos2::ZERO, theme::v2(SIZES[1].0, SIZES[1].1));
+    let merge = h.get_by_label(&format!("Merge into {LONG_NAME}")).rect();
+    let cancel = h.get_by_label("Cancel").rect();
+    assert!(
+        window.contains_rect(merge) && window.contains_rect(cancel),
+        "{merge:?} {cancel:?}"
+    );
+}
+
+/// Merge dialog: nothing preselected, Merge disabled until a pick; then
+/// the button names the target (§4.8).
+#[test]
+fn merge_needs_an_explicit_target() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::merge_model, SIZES[1], false);
+    assert!(h.get_by_label("Merge").accesskit_node().is_disabled());
+    h.get_by_label("Telekom Austria").click();
+    h.run();
+    assert!(
+        !h.get_by_label("Merge into Telekom Austria")
+            .accesskit_node()
+            .is_disabled()
+    );
+}
+
+/// Your own entries stay editable here (merge/rename keep hand-written
+/// spellings); the list file is one click away (§4.8).
+#[test]
+fn own_entries_can_be_merged_and_renamed() {
+    let _gpu = gpu_lock();
+    let h = harness(demo::companies_user_spelling_model, SIZES[0], false);
+    assert!(!h.get_by_label("Merge into…").accesskit_node().is_disabled());
+    assert!(!h.get_by_label("Rename…").accesskit_node().is_disabled());
+    assert!(h.query_by_label("Open file").is_some());
+}
+
 /// Empty screen: one optional scan-reader recommendation while the models
 /// are missing; gone once installed or when downloads are blocked.
 #[test]
@@ -1349,7 +1705,7 @@ fn empty_screen_recommends_the_scan_reader() {
         .unwrap_or_default();
     assert!(
         note.ends_with(
-            "Pages that need image reading are sent to OpenAI. Download the scan reader to read scans on this computer first."
+            "Reads scans on this computer first. The text is still sent to OpenAI to suggest the name."
         ),
         "{note}"
     );
@@ -1361,9 +1717,10 @@ fn empty_screen_recommends_the_scan_reader() {
     }
     assert!(ocr_hint_body(&m).starts_with("Scans can't be read with your current settings."));
     m.config.settings = None;
+    m.setup.provider = 1;
     assert_eq!(
         ocr_hint_body(&m),
-        "Reads scanned text on this computer before using AI image reading."
+        "Reads scans on this computer first. The text is still sent to Anthropic to suggest the name."
     );
     assert_eq!(
         h.query_all_by_label_contains("Download scan reader (")
@@ -2422,7 +2779,7 @@ fn name_list_edit_waits_on_worker_not_ui() {
     let db = autorename_core::harmonize::load_db(&path, "company_name").unwrap();
     assert!(!db.entries[0].review, "kept: saved to disk");
     assert!(!h.state().m.companies.entries()[0].review, "and shown");
-    h.state_mut().m.companies.active = Some(1); // Globex (ACME is now hand-kept)
+    h.state_mut().m.companies.active = Some(1); // Globex
     h.run();
     assert!(!h.get_by_label("Merge into…").accesskit_node().is_disabled());
 }

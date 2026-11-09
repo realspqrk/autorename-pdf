@@ -816,6 +816,12 @@ impl App {
             {
                 acts.push(Action::StartEdit(a));
             }
+            // O: open the active row's original PDF (the row's Open
+            // button is not a Tab stop, §8).
+            if take(Modifiers::NONE, Key::O) {
+                let path = self.m.rows[a].current_path(&self.m.restored).to_path_buf();
+                acts.push(Action::OpenPath(path));
+            }
             if take(Modifiers::NONE, Key::Delete) && !self.m.busy() && self.m.report.is_none() {
                 self.m.rows.remove(a);
                 self.m.active = if self.m.rows.is_empty() {
@@ -837,6 +843,12 @@ impl App {
     #[cfg(test)]
     pub(crate) fn worker_send_done(&self, generation: u64) {
         let _ = self.worker.tx.send(Msg::AnalysisDone(generation));
+    }
+
+    /// Targets handed to the worker's open (tests launch nothing).
+    #[cfg(test)]
+    pub(crate) fn opened(&self) -> &[PathBuf] {
+        &self.worker.opened
     }
 
     #[cfg(test)]
@@ -911,6 +923,13 @@ impl App {
                     // Learned names and review entries show up at once.
                     self.reload_names();
                 }
+                Msg::OpenFailed(target, e) => {
+                    let name = target.file_name().map_or_else(
+                        || target.display().to_string(),
+                        |n| n.to_string_lossy().into_owned(),
+                    );
+                    self.banner(Tone::Warning, &format!("Couldn't open {name}."), &e);
+                }
                 Msg::Applied(Err(e)) => {
                     self.m.phase = Phase::Idle;
                     self.banner(Tone::Danger, "Renaming failed.", &e.message);
@@ -943,6 +962,12 @@ impl App {
                                 self.banner(Tone::Warning, &t, "");
                             }
                             if is_current {
+                                self.m.restored.extend(
+                                    rep.files
+                                        .iter()
+                                        .filter(|f| f.status == journal::UndoStatus::Restored)
+                                        .map(|f| f.new_path.clone()),
+                                );
                                 self.m.undone = true;
                                 self.m.undo = Some(rep);
                             }
@@ -1066,12 +1091,12 @@ impl App {
             Action::OpenFolder => {
                 if let Some(r) = self.m.rows.first() {
                     let dir = r.source.parent().map(Path::to_path_buf).unwrap_or_default();
-                    open_path(&dir);
+                    self.worker.open(dir);
                 }
             }
-            Action::OpenPath(p) => open_path(&p),
+            Action::OpenPath(p) => self.worker.open(p),
             Action::ShowDoc(d) => self.m.doc_open = Some(d),
-            Action::OpenUrl(url) => open_path(Path::new(&url)),
+            Action::OpenUrl(url) => self.worker.open(PathBuf::from(url)),
             Action::ToggleSettings => {
                 if self.m.tab == Tab::Settings {
                     self.act_inner(ctx, Action::CloseSettings);
@@ -1217,7 +1242,7 @@ impl App {
             }
             Action::OpenConfigFile => {
                 if let Some(l) = &self.m.config.location {
-                    open_path(&l.path);
+                    self.worker.open(l.path.clone());
                 }
             }
             Action::OpenConfigFolder => {
@@ -1228,7 +1253,7 @@ impl App {
                     .as_ref()
                     .and_then(|l| l.path.parent())
                 {
-                    open_path(d);
+                    self.worker.open(d.to_path_buf());
                 }
             }
             Action::OpenCompaniesFile => {
@@ -1239,7 +1264,7 @@ impl App {
                     .clone()
                     .or_else(|| self.m.config.name_list().map(|(p, _)| p))
                 {
-                    open_path(&p);
+                    self.worker.open(p);
                 }
             }
             Action::KeepCompany(name) => {
@@ -1837,6 +1862,13 @@ impl App {
             return;
         };
         if self.m.demo {
+            let targets: Vec<PathBuf> = self
+                .m
+                .rows
+                .iter()
+                .filter_map(|r| r.report.as_ref()?.target.clone())
+                .collect();
+            self.m.restored.extend(targets);
             self.m.undone = true;
             let n = self.m.report.as_ref().map_or(0, |r| r.summary.renamed);
             self.toast(ctx, format!("Undid {}", c::plural(n, "rename", "renames")));
@@ -2033,17 +2065,6 @@ fn block_on<T>(fut: impl std::future::Future<Output = T>) -> T {
         }
         std::thread::park();
     }
-}
-
-fn open_path(p: &Path) {
-    let cmd = if cfg!(windows) {
-        "explorer"
-    } else if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let _ = std::process::Command::new(cmd).arg(p).spawn();
 }
 
 /// GUI Rename: a spelling change of one entry (`harmonize::rename`; the old
