@@ -5,7 +5,8 @@ use egui::{Rect, Sense, Ui, WidgetInfo};
 
 use super::Action;
 use crate::gui::components::{
-    Badge, Button, ellipsize_middle, in_rect, paint_text, paint_text_center, plural,
+    Badge, Button, ellipsize_middle, in_rect, label, paint_text, paint_text_center, paragraph,
+    plural,
 };
 use crate::gui::model::Model;
 use crate::gui::pages::short_time;
@@ -27,18 +28,37 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
         plural(h.batches.len(), "rename run", "rename runs"),
         active
     );
-    paint_text(
-        ui,
-        tr.left() + space::LG,
-        tr.center().y,
-        &summary,
-        typ::BODY,
-        p.text_muted,
-    );
+    if h.error.is_none() {
+        paint_text(
+            ui,
+            tr.left() + space::LG,
+            tr.center().y,
+            &summary,
+            typ::BODY,
+            p.text_muted,
+        );
+    }
     let list = Rect::from_min_max(egui::pos2(body.left(), tr.bottom()), body.max);
     ui.painter().rect_filled(list, 0, p.surface);
     if let Some(e) = &h.error {
-        paint_text_center(ui, list, e, typ::CAPTION, p.danger);
+        // Plain headline, the way out, then the technical detail (§7 error copy).
+        let w = (list.width() - 2.0 * space::XL).min(size::PROSE_MAX);
+        let col = Rect::from_center_size(list.center(), theme::v2(w, list.height()));
+        in_rect(ui, col, |ui| {
+            ui.add_space((list.height() / 3.0).round());
+            label(
+                ui,
+                "Your undo history can't be read.",
+                typ::BODY_STRONG,
+                p.danger,
+            );
+            ui.add_space(space::SM);
+            if let Some(hint) = &h.error_hint {
+                paragraph(ui, hint, typ::BODY, p.text);
+                ui.add_space(space::SM);
+            }
+            paragraph(ui, e, typ::CAPTION, p.text_muted);
+        });
         return;
     }
     if h.batches.is_empty() {
@@ -84,7 +104,7 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
                         if b.files > 0 {
                             plural(b.files, "file", "files")
                         } else {
-                            plural(b.names, "company name", "company names")
+                            plural(b.names, "learned name", "learned names")
                         }
                     );
                     paint_text(ui, x, l1, &title, typ::BODY_STRONG, t1);
@@ -108,7 +128,7 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
                             .a11y(a11y)
                             .loading(busy)
                             .enabled(!m.busy())
-                            .tooltip("Restores the original names, removes written metadata and forgets learned company names from this run");
+                            .tooltip("Restores the original names, removes written metadata and forgets names learned in this run");
                         let bw = btn.width(ui);
                         let br = Rect::from_min_size(
                             egui::pos2(right - bw, r.center().y - size::CONTROL / 2.0),

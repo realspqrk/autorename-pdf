@@ -790,6 +790,8 @@ pub struct HistoryState {
     pub batches: Vec<BatchView>,
     pub loaded: bool,
     pub error: Option<String>,
+    /// What to do about `error` (core's hint, e.g. move a corrupt journal aside).
+    pub error_hint: Option<String>,
 }
 
 impl HistoryState {
@@ -827,7 +829,7 @@ impl HistoryState {
         HistoryState {
             batches,
             loaded: true,
-            error: None,
+            ..Default::default()
         }
     }
 
@@ -844,6 +846,7 @@ impl HistoryState {
             Err(e) => HistoryState {
                 loaded: true,
                 error: Some(e.to_string()),
+                error_hint: e.hint().map(str::to_string),
                 ..Default::default()
             },
         }

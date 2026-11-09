@@ -493,7 +493,7 @@ fn done_card(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
             if Button::secondary("Undo rename")
                 .icon(theme::icon::UNDO_2)
                 .enabled(can_undo)
-                .tooltip("Restores the original names, removes the written metadata and forgets learned company names from this run")
+                .tooltip("Restores the original names, removes the written metadata and forgets names learned in this run")
                 .show(ui)
                 .clicked()
             {

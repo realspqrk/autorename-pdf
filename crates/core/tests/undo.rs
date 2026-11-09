@@ -143,7 +143,10 @@ fn corrupt_journal_is_an_error_not_overwritten() {
     let d = tempdir();
     let log = d.join("journal.json");
     std::fs::write(&log, "{corrupt").unwrap();
-    assert!(journal::read_journal(&log).is_err());
+    let e = journal::read_journal(&log).unwrap_err();
+    // The way out is in the error, for the CLI hint and the History screen.
+    let hint = e.hint().expect("corrupt journal error carries a hint");
+    assert!(hint.contains(&log.display().to_string()) && hint.contains("aside"));
     assert!(journal::update(&log, Utc::now(), |_| ()).is_err());
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "{corrupt");
 }

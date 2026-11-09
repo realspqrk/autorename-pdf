@@ -93,7 +93,7 @@ Every spelling of the same company gets one canonical form in your file names. E
 - Company names are compared ignoring case, punctuation and legal forms (GmbH, AG, Inc, Ltd, LLC, SA, BV, …); other fields ignore only case, spacing and surrounding punctuation.
 - **Auto-learning** (on by default, `--no-learn` for one run): a similarity of 0.92 or more adds a learned alias; 0.75–0.92 asks a small AI decider (`harmonization.decider`); below that creates a new entry. Without a decider verdict an ambiguous name becomes a new entry flagged `review`, never a silent merge.
 - Learned names belong to the run's undo batch. `undo` removes them, but never an entry you renamed, merged or accepted. The whole lifecycle: `autorename-pdf names --help`.
-- In the window: the Companies tab. On the command line: `names list | review | merge | rename | add` (`--field journal_name` picks another list).
+- In the window: the Name matching tab. On the command line: `names list | review | merge | rename | add` (`--field journal_name` picks another list).
 
 Walkthrough on the [demo](../examples/demo/) (real output, OpenAI):
 

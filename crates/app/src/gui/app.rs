@@ -49,6 +49,32 @@ const STORE_PREFS: &str = "prefs";
 /// Core's message for a cancelled model download.
 /// Banner action that re-analyzes a plan whose settings changed.
 pub const REANALYZE: &str = "Re-analyze";
+/// Banner action that opens History (its unreadable-journal message says what to do).
+pub const OPEN_HISTORY: &str = "Open History";
+
+/// Banner for a failed rename or undo. When the undo history itself can't
+/// be read (`history` freshly loaded), say that in plain words and point to
+/// History, which shows the way out; otherwise the error as it is.
+pub(crate) fn failure_banner(
+    title: &str,
+    e: &pipeline::ErrorInfo,
+    history: &super::pages::HistoryState,
+) -> BannerMsg {
+    if history.error.is_some() {
+        return BannerMsg {
+            tone: Tone::Danger,
+            title: "Your undo history can't be read.".into(),
+            body: "Renaming and undo need it. History shows how to fix this.".into(),
+            action: Some(OPEN_HISTORY.into()),
+        };
+    }
+    BannerMsg {
+        tone: Tone::Danger,
+        title: title.into(),
+        body: e.message.clone(),
+        action: None,
+    }
+}
 pub const CANCELLED: &str = "Download cancelled";
 /// Offline mode refuses model downloads (CLI parity).
 pub const DOWNLOAD_BLOCKED: &str = "Offline mode doesn't download models. Use Import from folder… with files copied from another computer.";
@@ -932,7 +958,7 @@ impl App {
                 }
                 Msg::Applied(Err(e)) => {
                     self.m.phase = Phase::Idle;
-                    self.banner(Tone::Danger, "Renaming failed.", &e.message);
+                    self.op_failed("Renaming failed.", &e);
                 }
                 // Undo results are routed by batch id: only the batch that
                 // was undone changes state, never a newer result.
@@ -972,7 +998,7 @@ impl App {
                                 self.m.undo = Some(rep);
                             }
                         }
-                        Err(e) => self.banner(Tone::Danger, "Undo failed.", &e.message),
+                        Err(e) => self.op_failed("Undo failed.", &e),
                     }
                     self.m.history.loaded = false;
                     self.reload_names();
@@ -1029,6 +1055,15 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn op_failed(&mut self, title: &str, e: &pipeline::ErrorInfo) {
+        let history = if self.m.demo {
+            super::pages::HistoryState::default()
+        } else {
+            super::pages::HistoryState::load()
+        };
+        self.m.banners.push(failure_banner(title, e, &history));
     }
 
     fn banner(&mut self, tone: Tone, title: &str, body: &str) {
@@ -1312,10 +1347,14 @@ impl App {
             Action::DismissBanner(i) | Action::BannerPrimary(i) => {
                 if i < self.m.banners.len() {
                     let b = self.m.banners.remove(i);
-                    if matches!(a, Action::BannerPrimary(_))
-                        && b.action.as_deref() == Some(REANALYZE)
-                    {
-                        self.schedule(&[], &[]);
+                    if matches!(a, Action::BannerPrimary(_)) {
+                        match b.action.as_deref() {
+                            Some(REANALYZE) => {
+                                self.schedule(&[], &[]);
+                            }
+                            Some(OPEN_HISTORY) => self.act(ctx, Action::SwitchTab(Tab::History)),
+                            _ => {}
+                        }
                     }
                 }
             }

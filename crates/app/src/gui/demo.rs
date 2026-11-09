@@ -536,7 +536,7 @@ pub fn history() -> HistoryState {
             ),
         ],
         loaded: true,
-        error: None,
+        ..Default::default()
     }
 }
 
@@ -667,6 +667,24 @@ pub fn merge_model() -> Model {
 pub fn history_model() -> Model {
     let mut m = configured_empty_model();
     m.tab = Tab::History;
+    m
+}
+
+/// History when the undo journal can't be read (core error + hint).
+pub fn history_error_model() -> Model {
+    let mut m = history_model();
+    let path = "/home/maria/.local/share/autorename-pdf/journal.json";
+    m.history = HistoryState {
+        loaded: true,
+        error: Some(format!(
+            "{path}: undo journal is corrupt: missing field `field` at line 32 column 9"
+        )),
+        error_hint: Some(format!(
+            "Move {path} aside (e.g. rename it to journal.json.bak) to start a new history; \
+             the runs recorded in it can then no longer be undone."
+        )),
+        ..Default::default()
+    };
     m
 }
 

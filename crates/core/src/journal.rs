@@ -177,9 +177,14 @@ pub fn parse_journal(text: &str) -> Result<Journal> {
 /// Missing → empty journal. Corrupt → error (never silently overwritten).
 pub fn read_journal(path: &Path) -> Result<Journal> {
     match std::fs::read_to_string(path) {
-        Ok(text) => {
-            parse_journal(&text).map_err(|e| Error::General(format!("{}: {e}", path.display())))
-        }
+        Ok(text) => parse_journal(&text).map_err(|e| Error::Config {
+            message: format!("{}: {e}", path.display()),
+            hint: Some(format!(
+                "Move {} aside (e.g. rename it to journal.json.bak) to start a new history; \
+                 the runs recorded in it can then no longer be undone.",
+                path.display()
+            )),
+        }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Journal::default()),
         Err(e) => Err(Error::io(path, e)),
     }

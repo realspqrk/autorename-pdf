@@ -93,7 +93,7 @@ Any PDF tool can read the attachment too (qpdf, pdfdetach: [examples](docs/guide
 
 ## Keep company names consistent
 
-The app remembers each company the first time you rename a PDF from it and reuses that spelling. In the Companies tab: if the same company appears twice, select the spelling you don't want, choose **Merge into**, and pick the name to keep. To change one company's spelling, choose **Rename**. Existing file names stay as they are; future documents use the new name. On the command line ([full walkthrough](docs/guide.md#name-matching)):
+The app remembers each company the first time you rename a PDF from it and reuses that spelling. In the Name matching tab: if the same company appears twice, select the spelling you don't want, choose **Merge into**, and pick the name to keep. To change one company's spelling, choose **Rename**. Existing file names stay as they are; future documents use the new name. On the command line ([full walkthrough](docs/guide.md#name-matching)):
 
 ```console
 $ autorename-pdf names rename "ACME Corporation" ACME

@@ -31,14 +31,13 @@ git status --short --ignored   # should show only .env, target/, vendor/ as igno
 | Path | What | Action |
 |---|---|---|
 | `autorename.log` | 3.x log, written by the old pytest runs | Delete. |
-| `journal.json`, `journal.json.lock` | 4.0-dev undo journal from 2026-11-07. **Required action:** since name lists are per field (2026-11-08), learned-alias entries need a `field`; this old journal no longer parses and blocks `rename`/`undo` ("undo journal is corrupt: missing field `field`"). Both batches in it are already undone. | Move it aside (commands below). |
+| `journal.json.dev-2026-11-07.bak` | Old 4.0-dev undo journal, moved aside on 2026-11-09 (its format predates per-field name lists; both runs in it were already undone) | Delete when you like. |
 | `models/latin/` (~38 MB) | OCR models | Keep for OCR. Remove with `autorename-pdf models remove latin`. |
 
 ```bash
 cd ~/.local/share/autorename-pdf
-mv journal.json journal.json.dev-2026-11-07.bak   # both batches already undone
 rm -f autorename.log                             # 3.x log
-# later, once nothing is missing: rm journal.json.dev-2026-11-07.bak
+rm -f journal.json.dev-2026-11-07.bak            # old dev journal, already moved aside
 ```
 
 ## 3. Build caches

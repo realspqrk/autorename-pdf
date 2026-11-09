@@ -96,6 +96,7 @@ fn screens() -> Vec<Screen> {
             m
         }),
         ("history", demo::history_model),
+        ("history_error", demo::history_error_model),
     ]
 }
 
@@ -491,7 +492,7 @@ fn keyboard_tab_order_and_enter_on_rename() {
         stops,
         [
             "Rename",
-            "Companies, 3 need a look",
+            "Name matching, 3 need a look",
             "History",
             "Settings",
             "Hide details",
@@ -1921,7 +1922,7 @@ fn invalid_name_format_blocks_save() {
     assert!(h.state().m.settings.dirty(), "Ctrl+Enter does not save");
 }
 
-/// The name-matching tab is labelled by the active profile's field and
+/// The name-matching tab has one stable label ("Name matching") and is
 /// hidden (Ctrl+2 a no-op) for a profile without one; the Naming page
 /// follows the selected profile.
 #[test]
@@ -1929,18 +1930,18 @@ fn name_tab_follows_profile() {
     use super::model::Tab;
     let _gpu = gpu_lock();
     let mut h = harness(demo::configured_empty_model, SIZES[0], false);
-    h.get_by_role_and_label(Role::Tab, "Companies, 3 need a look");
+    h.get_by_role_and_label(Role::Tab, "Name matching, 3 need a look");
     switch_profile(&mut h, "academic");
     h.run();
     assert!(
-        h.query_by_label_contains("Companies").is_none(),
+        h.query_by_label_contains("Name matching").is_none(),
         "no name matching, no tab"
     );
     h.key_press_modifiers(Modifiers::COMMAND, Key::Num2);
     h.run();
     assert_eq!(h.state().m.tab, Tab::Rename, "Ctrl+2 does nothing");
 
-    // A profile matching journal names: "Venues", venue copy.
+    // A profile matching journal names: same tab label, venue copy inside.
     let mut m = demo::companies_model();
     let mut tree = m.config.tree.clone().unwrap();
     tree["profiles"] = serde_json::json!({"academic": {"harmonize_field": "journal_name"}});
@@ -1957,7 +1958,7 @@ fn name_tab_follows_profile() {
             App::with_model(m, None)
         });
     h.run();
-    h.get_by_label_contains("Venues");
+    h.get_by_role_and_label(Role::Tab, "Name matching, 3 need a look");
     h.get_by_label("Keep as new venue");
     h.get_by_label("Search venues");
 }
@@ -1996,7 +1997,7 @@ fn profile_switch_reloads_name_list() {
         "the new list loads on the worker; the old one is gone at once"
     );
     run_until(&mut h, "NeurIPS list", |a| names(a) == ["NeurIPS"]);
-    h.get_by_role_and_label(Role::Tab, "Venues");
+    h.get_by_role_and_label(Role::Tab, "Name matching");
     switch_profile(&mut h, "academic");
     h.run();
     assert_eq!(h.state().m.tab, Tab::Rename, "tab gone, back to Rename");
@@ -2877,4 +2878,31 @@ fn settings_copy_follows_state() {
             "a selected cloud decider without a key blocks Save"
         );
     }
+}
+
+/// A rename/undo that fails on an unreadable undo journal points to History
+/// (plain words + "Open History"); any other failure shows its own message.
+#[test]
+fn failure_banner_points_to_history_when_the_journal_is_unreadable() {
+    use super::app::{OPEN_HISTORY, failure_banner};
+    use super::pages::HistoryState;
+    let e = autorename_core::pipeline::ErrorInfo {
+        code: "config_error".into(),
+        message: "/x/journal.json: undo journal is corrupt".into(),
+        hint: Some("Move /x/journal.json aside".into()),
+        retryable: false,
+    };
+    let broken = HistoryState {
+        loaded: true,
+        error: Some(e.message.clone()),
+        error_hint: e.hint.clone(),
+        ..Default::default()
+    };
+    let b = failure_banner("Renaming failed.", &e, &broken);
+    assert_eq!(b.title, "Your undo history can't be read.");
+    assert_eq!(b.action.as_deref(), Some(OPEN_HISTORY));
+    let other = failure_banner("Renaming failed.", &e, &HistoryState::default());
+    assert_eq!(other.title, "Renaming failed.");
+    assert_eq!(other.body, e.message);
+    assert!(other.action.is_none());
 }

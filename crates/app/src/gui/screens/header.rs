@@ -33,12 +33,15 @@ pub fn header(ui: &mut Ui, rect: Rect, m: &Model, acts: &mut Vec<Action>) {
     } else {
         m.config.review_count
     };
-    // Name-matching tab: labelled by the active profile's field (§4.1),
-    // hidden when the profile matches no names.
-    let names = m.name_label().map(|(_, plural)| plural);
+    // Name-matching tab: one stable label for every profile (§4.1), hidden
+    // when the profile matches no names.
     let mut tabs: Vec<(Tab, &str, Option<usize>)> = vec![(Tab::Rename, "Rename", None)];
-    if let Some(n) = &names {
-        tabs.push((Tab::Companies, n, (review > 0).then_some(review)));
+    if m.name_label().is_some() {
+        tabs.push((
+            Tab::Companies,
+            "Name matching",
+            (review > 0).then_some(review),
+        ));
     }
     tabs.push((Tab::History, "History", None));
     for (tab, label, count) in tabs {
