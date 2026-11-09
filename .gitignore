@@ -16,6 +16,9 @@ name-lists/*.yaml
 # Test leftovers: egui_kittest snapshot diffs, pending insta snapshots
 **/tests/snapshots/**/*.diff.png
 **/tests/snapshots/**/*.new.png
+docs/images/*.diff.png
+docs/images/*.new.png
+docs/images/*.old.png
 *.snap.new
 
 # Agent / editor local state
