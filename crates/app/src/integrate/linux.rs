@@ -1034,6 +1034,8 @@ exec '/opt/Auto Rename/autorename-pdf' gui -- \"$@\"
 
     /// Review finding: `%F` inside the executable path must not reach
     /// Nemo/Thunar token expansion; they launch an owned wrapper instead.
+    // Linux paths and file names (':' etc.); Windows cannot hold them.
+    #[cfg(unix)]
     #[test]
     fn percent_in_exe_uses_a_token_free_wrapper() {
         let d = Dirs {
@@ -1155,6 +1157,8 @@ exec '/opt/Auto Rename/autorename-pdf' gui -- \"$@\"
         assert!(thunar_merge(Some("<actions><action>"), "/x").is_err());
     }
 
+    // Linux paths and file names (':' etc.); Windows cannot hold them.
+    #[cfg(unix)]
     #[test]
     fn entries_cover_every_host() {
         let d = Dirs {
@@ -1269,6 +1273,8 @@ exec '/opt/Auto Rename/autorename-pdf' gui -- \"$@\"
     }
 
     /// A lost ownership record: icons with exactly our bytes are re-adopted.
+    // Linux paths and file names (':' etc.); Windows cannot hold them.
+    #[cfg(unix)]
     #[test]
     fn identical_icons_are_readopted() {
         let t = tempfile::tempdir().unwrap();
@@ -1282,6 +1288,8 @@ exec '/opt/Auto Rename/autorename-pdf' gui -- \"$@\"
     }
 
     /// Finding 9 residue: `%` in the data dir as well → Nemo/Thunar skipped.
+    // Linux paths and file names (':' etc.); Windows cannot hold them.
+    #[cfg(unix)]
     #[test]
     fn percent_in_data_dir_skips_nemo_and_thunar() {
         let t = tempfile::tempdir().unwrap();
