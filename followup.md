@@ -54,7 +54,7 @@ Evaluated 2026-11-07. The default `ai` decider uses the main provider. `harmoniz
 - AppImage without FUSE: menu entries rely on the documented extract-to-`~/.local/opt/autorename-pdf` + `integrate install` route; an Exec that works mounted and extracted is not implemented.
 
 - **Linux-side NSIS build**: Arch has no `makensis`, so Windows installers are built on Windows (CI `release.yml`). A Linux build needs NSIS from source or a container.
-- **macOS signing + notarization**: `.app`/`.dmg` are unsigned and not validated; Finder Quick Actions are untested. Needs an Apple Developer ID, `codesign`, `notarytool`, and a macOS CI runner.
+- **macOS signing + notarization**: steps written in `playbooks/macos-release.md`, never run; Finder Quick Actions untested. Needs a Mac with an Apple Developer ID (optionally a macOS CI runner).
 - **Windows 11 modern context menu**: today the verbs are classic HKCU entries under "Show more options". The top-level menu needs a signed sparse package plus an `IExplorerCommand` COM handler.
 - **CI GUI tests**: hosted runners have no GPU, so CI skips `gui::tests`. Try mesa lavapipe (`mesa-vulkan-drivers`) and check that the snapshots stay within tolerance.
 

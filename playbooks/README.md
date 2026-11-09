@@ -2,4 +2,5 @@
 - [natives-and-models.md](natives-and-models.md): fetch/bump PDFium natives and OCR model packs; where they live per OS.
 - [live-poc.md](live-poc.md): live cloud provider smoke tests + full offline Ollama/OCR rename→undo POC.
 - [release.md](release.md): version bump, gates, `cargo xtask dist` per OS, Azure Trusted Signing, checksums, publish.
+- [macos-release.md](macos-release.md): build, sign (Developer ID), notarize and verify the macOS `.app`/`.dmg` on a Mac.
 - [windows-vm-validation.md](windows-vm-validation.md): install the NSIS build in the Windows VM, verify registry/icons/CLI/context menu, uninstall.
