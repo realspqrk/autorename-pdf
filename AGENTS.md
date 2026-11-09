@@ -11,16 +11,17 @@ For agents asked to "set up AutoRename-PDF" for a user. Non-interactive; ask the
 1. **Get the binary** (`$APP` below).
    - Windows x64: `gh release download --repo realspqrk/autorename-pdf --pattern "*_x64-setup.exe"`, run it with `/S` (per-user, no admin). `$APP` = `autorename-pdf` (on the user PATH in new shells) or `%LOCALAPPDATA%\Programs\AutoRename-PDF\autorename-pdf.exe`.
    - Linux x86_64: `gh release download --repo realspqrk/autorename-pdf --pattern "*.AppImage"`, `chmod +x`. `$APP` = that file. Preflight FUSE: `ls /dev/fuse && (command -v fusermount3 || command -v fusermount)`; if that fails: `$APP --appimage-extract && mkdir -p ~/.local/opt && mv squashfs-root ~/.local/opt/autorename-pdf` and use `$APP` = `~/.local/opt/autorename-pdf/AppRun` (stable path for `--integrate`).
-   - Else (macOS, other arch), from source: `git clone https://github.com/realspqrk/autorename-pdf && cd autorename-pdf && cargo xtask fetch-natives && cargo build --release -p autorename-app`. `$APP` = `target/release/autorename-pdf` (run it from the clone; it finds PDFium in `vendor/`).
+   - Else (macOS, other arch), from source: `git clone https://github.com/realspqrk/autorename-pdf && cd autorename-pdf && cargo xtask fetch-natives && cargo build --release -p autorename-app`. `$APP` = `target/release/autorename-pdf` (run it from the clone; it finds PDFium in `vendor/`). Intel macOS: add `--no-default-features --features gui` (no OCR).
+   Then read `$APP --help` and `$APP setup --help`. Before first use of any other command read `$APP <command> --help`: the installed help is the usage reference.
 2. `$APP setup --check -o json` → read `steps[]` (`missing` + `hint`). Exit 0 = ready.
 3. Configure (idempotent; safe to re-run):
    - Cloud: key in an env var → `$APP setup --provider openai --api-key-env OPENAI_API_KEY --company "<Company>" -o json`; key only in your context → `printf %s "$KEY" | $APP setup --provider <p> --api-key-stdin --company "<Company>" -o json`.
-   - Offline: `ollama pull gemma4` (CPU only: `gemma4:e2b`), then `$APP setup --offline --ollama-model <model> --company "<Company>" -o json` (add `--ollama-url` if not local). OCR models: fetch while still online (`$APP setup --ocr-models`), or on an air-gapped machine copy the `models` folder from a connected one and run `$APP models import <dir>` (`<dir>` = that `models` folder or its `latin` subfolder; `--pack` only for other languages). `setup` never downloads in offline mode.
+   - Offline: `ollama pull gemma4` (CPU only: `gemma4:e2b`). OCR models first, while not yet offline: `$APP setup --ocr-models`; air-gapped: copy the `models` folder from a connected machine and run `$APP models import <dir>` (`<dir>` = that `models` folder or its `latin` subfolder; `--pack` only for other languages). Then `$APP setup --offline --ollama-model <model> --company "<Company>" -o json` (add `--ollama-url` if not local). Saved offline mode refuses every download.
    - Offline → cloud: `$APP setup --cloud --provider <p> --api-key-env VAR -o json` (saved offline mode is never left implicitly). A provider change resets `ai.base_url`; pass `--base-url URL` for a gateway.
    - Exit 0 = ready; 3 = see the failed step's `hint`; 2 = bad flags.
 4. Verify with the demo (needs the repo's `examples/demo/`): `cp -r examples/demo ./demo && $APP rename --plan plan.json demo -o json` → exit 0, `summary.total` 7 (expected names: `examples/demo/README.md`). To rename for real without paying for a second analysis: `$APP apply plan.json -o json` (to change a name, edit `items[].proposed_name` first), `$APP undo -o json` reverts.
    Isolation for tests/sandboxes: `AUTORENAME_PDF_DATA_DIR=<dir>` (journal, OCR models) + `--config <file>`.
-5. Optional: `$APP setup --integrate` (file-manager "Rename now/Preview"), `$APP setup --ocr-models` (~40 MB, scans read locally).
+5. Optional: `$APP setup --integrate` (file-manager "Rename now/Preview"). Cloud mode: `$APP setup --ocr-models` (~40 MB, scans read locally); offline: see step 3.
 6. Tell the user: GUI = run `$APP` (no arguments); CLI = `$APP rename --dry-run <folder>`, then `$APP rename <folder>`, `$APP undo`.
 
 ## Sources of truth
@@ -33,6 +34,7 @@ Do not copy these into this file.
 | GUI tokens, screens, keyboard, review checklist | `docs/superpowers/specs/2026-11-07-gui-design.md` |
 | Provider request/response details | `docs/superpowers/specs/2026-11-07-provider-reference.md` |
 | Parity contract (naming, quality score) | `docs/superpowers/specs/2026-11-07-python-behavior-contract.md` |
+| User docs (quick start; install details, reading steps, offline, embedded data, name matching) | `README.md`, `docs/guide.md` |
 | Config keys and defaults | `config.yaml.example`, `examples/` (validated by `crates/app/tests/examples.rs`) |
 | CLI behavior | `autorename-pdf <cmd> --help` (snapshots in `crates/app/tests/snapshots/`) |
 | Runbooks: release, natives/models, live POC, Windows VM | `playbooks/` |

@@ -12,7 +12,7 @@ Invoices, a letter, a German *Rechnung*, a 3-page invoice and an image-only scan
 | `springfield-scan.pdf` | image-only scan → local OCR, else vision |
 | `stark-invoice-3-pages.pdf` | multi-page |
 
-All outputs below are real (OpenAI `gpt-6-luna`, recorded 2026-11-07, no OCR models installed). AI answers can vary slightly between runs; `AP`/`AR` and the amount format are derived by the app (from issuer/recipient and `total_amount` + `currency`), not left to the model.
+All outputs below are real (OpenAI `gpt-6-luna`, recorded 2026-11-09, no OCR models installed). AI answers can vary slightly between runs; `AP`/`AR` and the amount format are derived by the app (from issuer/recipient and `total_amount` + `currency`), not left to the model.
 
 ## 1. Set up (once)
 
@@ -64,16 +64,18 @@ $ autorename-pdf rename --dry-run demo
   acme-invoice.pdf           →  20240315 ACME Corporation AP EUR 4,258.80.pdf
   globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf
   initech-invoice.pdf        →  20240628 Initech Solutions AP EUR 237.50.pdf
+                                page 1 sent to AI as an image
                                 ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin Run `autorename-pdf models fetch latin` (~39 MB), or disable OCR (pdf.ocr: false).
   invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf
   rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf
   springfield-scan.pdf       →  20241103 Springfield Power Co AP USD 4,300.00.pdf
+                                page 1 sent to AI as an image
                                 ! ocr_models_missing: OCR models for pack 'latin' are not installed in .../models/latin Run `autorename-pdf models fetch latin` (~39 MB), or disable OCR (pdf.ocr: false).
   stark-invoice-3-pages.pdf  →  20250301 Stark Industries AP EUR 17,100.00.pdf
 Dry run: 7 to rename (nothing changed)
 ```
 
-The scan has no text layer, and the Initech invoice has a logo: a page with a picture scores at most 0.75, below the default threshold 0.8, so both are read again. Without OCR models the app says so and sends those page images to the model instead (`pdf.vision: auto`). With `autorename-pdf models fetch` they are read locally first (`inspect demo/initech-invoice.pdf` shows `p1 0.75 pictures`).
+The scan has no text layer, and the Initech invoice has a logo: a page with a picture scores at most 0.75, below the default threshold 0.8, so both are read again. Without OCR models the app says so and sends those page images to the model instead (`pdf.vision: auto`). With `autorename-pdf models fetch` they are read locally first (`inspect demo/initech-invoice.pdf` then shows `p1 0.75 pictures ocr 1.00` and `tier OCR`).
 
 ## 4. Plan, apply, inspect, undo
 
@@ -83,26 +85,26 @@ $ autorename-pdf rename --plan plan.json demo      # AI calls, no changes; revie
 Plan written to plan.json (run `autorename-pdf apply plan.json`).
 ...
 $ autorename-pdf apply plan.json                   # no AI calls
-  acme-invoice.pdf           →  20240315 ACME Corporation AP EUR 4,258.80.pdf  enriched · new company
-  globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf  enriched · new company
-  initech-invoice.pdf        →  20240628 Initech Solutions AP EUR 237.50.pdf  enriched · new company
+  acme-invoice.pdf           →  20240315 ACME Corporation AP EUR 4,258.80.pdf  enriched · new entry
+  globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf  enriched · new entry
+  initech-invoice.pdf        →  20240628 Initech Solutions AP EUR 237.50.pdf  enriched · new entry
                                 ! ocr_models_missing: ...
-  invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf  enriched · new company
-  rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf  enriched · new company
-  springfield-scan.pdf       →  20241103 Springfield Power Co AP USD 4,300.00.pdf  enriched · new company
+  invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf  enriched · new entry
+  rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf  enriched · new entry
+  springfield-scan.pdf       →  20241103 Springfield Power Co AP USD 4,300.00.pdf  enriched · new entry
                                 ! ocr_models_missing: ...
-  stark-invoice-3-pages.pdf  →  20250301 Stark Industries AP EUR 17,100.00.pdf  enriched · new company
+  stark-invoice-3-pages.pdf  →  20250301 Stark Industries AP EUR 17,100.00.pdf  enriched · new entry
 Done: 7 renamed, 7 enriched, 7 names learned  (revert: autorename-pdf undo)
 
 $ autorename-pdf inspect "demo/20240315 ACME Corporation AP EUR 4,258.80.pdf"
 .../demo/20240315 ACME Corporation AP EUR 4,258.80.pdf
-  size        7774 bytes
+  size        7775 bytes
   security    not signed, not encrypted
   enrich      eligible
   text        quality 1.00 (threshold 0.80), 653 chars, 1/1 pages
   pages       p1 1.00
   tier        text layer only
-  embedded    yes (2026-11-07T15:54:11Z)
+  embedded    yes (2026-11-09T07:19:39Z)
   fields      document_date=15.03.2024, company_name=ACME Corporation, issuer=ACME Corporation GmbH, recipient=Spqrk GmbH, document_type=AP, total_amount=4,258.80, currency=EUR, description=EUR 4,258.80
   images      not sent
 
@@ -114,7 +116,7 @@ $ autorename-pdf undo
   20240628 Initech Solutions AP EUR 237.50.pdf      →  initech-invoice.pdf
   20250122 Globex Corporation Letter.pdf            →  globex-letter.pdf
   20240315 ACME Corporation AP EUR 4,258.80.pdf     →  acme-invoice.pdf
-Undo: 7 restored, 0 failed, 7 metadata reverted, 7 names forgotten  (batch 20261107T155411-b3e9a7)
+Undo: 7 restored, 0 failed, 7 metadata reverted, 7 names forgotten  (batch 20261109T071939-b7ad36)
 ```
 
 After `undo` every file is byte-identical to the original, and the learned company names are gone again.

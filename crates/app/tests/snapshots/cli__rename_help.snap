@@ -27,8 +27,9 @@ NETWORK:
 
 OUTPUT:
   text: `old.pdf -> new.pdf` per file and a summary.
-  json: the result (`schema result`); with --dry-run/--plan the plan
-  (`schema plan`). Each file has rename_status, enrich_status, learn_status.
+  json: the result (`schema result`): each of `files[]` has rename_status,
+  enrich_status and learn_status. With --dry-run/--plan the plan
+  (`schema plan`): each of `items[]` has status, enrich and learn.
 
 Usage: autorename-pdf rename [OPTIONS] <PATH>...
 
@@ -61,7 +62,7 @@ Options:
           Model id for this run [default: per-provider default from the config]
 
       --ocr[=<WHEN>]
-          Offline OCR (`--ocr` = on; default auto = poor text layer); needs `models fetch`
+          Local OCR (`--ocr` = on; auto = poor text only); needs OCR models
 
           Possible values:
           - auto: Only pages scoring below pdf.text_quality_threshold
@@ -69,7 +70,7 @@ Options:
           - off
 
       --vision[=<WHEN>]
-          Page images to the model (`--vision` = on; default auto = text + OCR still poor)
+          Send page images (`--vision` = on; auto = still poor after OCR)
 
           Possible values:
           - auto: Only pages scoring below pdf.text_quality_threshold
@@ -98,7 +99,7 @@ Global options:
           Possible values:
           - text:   Human-readable, aligned, colored on a terminal
           - json:   One JSON document on stdout
-          - ndjson: Progress events, one JSON object per line; the last line is the result
+          - ndjson: Progress events as JSON lines; the last line is the result
 
   -q, --quiet
           No progress or notices on stderr (errors are still reported)
@@ -113,9 +114,9 @@ Global options:
           Disable colors (also: NO_COLOR, or output that is not a terminal)
 
 EXAMPLES:
-  autorename-pdf rename invoice.pdf
-  autorename-pdf rename --dry-run -r ~/Documents/Inbox
-  autorename-pdf rename ~/Scans --ocr=auto --vision=auto
-  autorename-pdf rename *.pdf --provider anthropic --model claude-haiku-5-5
-  autorename-pdf rename ~/Scans --plan plan.json -o json   # then: apply plan.json
-  autorename-pdf --offline rename ~/Private                # local Ollama only
+  autorename-pdf rename --dry-run ~/Scans           # preview first
+  autorename-pdf rename ~/Scans                     # then rename
+  autorename-pdf rename -r ~/Documents/Inbox        # include subfolders
+  autorename-pdf rename --plan plan.json ~/Scans    # then: apply plan.json
+  autorename-pdf rename --ocr=on --vision=off scan.pdf  # never send images
+  autorename-pdf --offline rename ~/Private         # local Ollama only

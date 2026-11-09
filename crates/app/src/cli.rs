@@ -12,39 +12,51 @@ const ABOUT: &str = "Rename PDFs from their content (AI + OCR).";
 const LONG_ABOUT: &str = "\
 Rename PDFs from their content (AI + OCR).
 
-autorename-pdf reads each PDF free-first (text layer, then offline OCR, then
-page images for vision models, each only when the previous tier is poor),
-asks one AI provider for structured fields (date, company, document type,
-total, ...) and renames the file from a profile template, e.g.
-`20240315 ACME AP 1.234,56.pdf`. By default it also embeds the extracted data
-in the PDF and learns new company-name variants. Every change is journaled
-and can be reverted with `undo`.";
+autorename-pdf reads each PDF, asks an AI model for the date, company,
+document type and total, and renames the file, e.g. `scan_0042.pdf` ->
+`20240315 ACME AP EUR 4,258.80.pdf`. It also stores the extracted data inside
+the PDF and keeps company names spelled the same way. Text is read on this
+computer first (text layer, then local OCR); page images go to the model only
+when that is not enough. Every change can be reverted with `undo`.
 
-const AFTER_HELP: &str = "\
-Run `autorename-pdf --help` for the workflow, agent usage and exit codes.";
-
-const AFTER_LONG_HELP: &str = "\
-WORKFLOW:
-  autorename-pdf setup --api-key-env OPENAI_API_KEY --company Spqrk
-                                             # once: config + key (idempotent)
+TYPICAL WORKFLOW:
+  autorename-pdf setup --provider openai --api-key-env OPENAI_API_KEY \\
+      --company \"Your Company\"               # once; safe to re-run
   autorename-pdf rename --dry-run ~/Scans    # preview; changes nothing
-  autorename-pdf rename ~/Scans              # rename + enrich + learn
+  autorename-pdf rename ~/Scans              # rename, embed data, learn names
   autorename-pdf undo                        # revert the last run
 
+  Review before renaming (agents, scripts, a person checking names):
+  autorename-pdf rename --plan plan.json ~/Scans   # AI calls, no changes
+  autorename-pdf apply plan.json                   # no AI calls
+  Edit `items[].proposed_name` in plan.json first to choose another name.";
+
+const AFTER_HELP: &str = "\
+Start with `autorename-pdf --help`: workflow, agent guidance, exit codes.";
+
+const AFTER_LONG_HELP: &str = "\
 FOR AGENTS:
+  - Run `autorename-pdf <command> --help` before first use of a command:
+    it documents options, side effects and network use. Exit codes are below.
   - Setting the app up for a user: `setup --check -o json`, then `setup ...`
     (see `setup --help`; never put API keys on the command line).
-  - Always pass `--output json` (also the default when stdout is not a TTY).
-  - Two steps: `rename --plan plan.json <paths>` (AI calls, no changes),
-    review plan.json, then `apply plan.json` (no AI calls; refuses files that
-    changed since the plan was made).
-  - Never prompts. stdout carries only the result document; diagnostics and
-    progress go to stderr. `--output ndjson` streams progress events on stdout
+  - Rename in two steps: `rename --plan plan.json <paths>`, show the user the
+    proposed names, then `apply plan.json` (refuses files that changed since
+    the plan). `undo` reverts the whole run.
+  - Pass `-o json` (also the default when stdout is not a terminal). It never
+    prompts. stdout carries only the result document; diagnostics and
+    progress go to stderr. `-o ndjson` streams progress events on stdout
     (one JSON object per line, the last line is the result document).
   - Errors: {\"schema_version\":4,\"error\":{\"code\",\"message\",\"hint\",\"retryable\"}}
     with stable codes; per-file errors use the same shape in `files[].error`
     (plans: `items[].error`).
   - JSON Schemas of every document: `autorename-pdf schema`.
+  - Data extracted earlier, without a new AI call:
+    `inspect <pdf> -o json` -> `.files[0].embedded.attachment`.
+  - Isolated runs (tests, sandboxes): AUTORENAME_PDF_DATA_DIR=<dir> (undo
+    journal, OCR models, locks) and --config <file>.
+  - Windows: JSON output and plan files escape non-ASCII as \\uXXXX; `*` and
+    `?` in paths are expanded by the app (cmd/PowerShell pass them through).
 
 NETWORK:
   `rename` and `gui` send extracted text (and page images when vision runs)
@@ -58,6 +70,7 @@ NETWORK:
 FILES:
   `autorename-pdf config path` prints every location: config.yaml (+ .env
   beside it), the name-lists folder, the undo journal, OCR models.
+  Without arguments on a desktop, `autorename-pdf` opens the window (`gui`).
 
 EXIT CODES:
   0   success
@@ -93,7 +106,7 @@ pub enum OutputFormat {
     Text,
     /// One JSON document on stdout
     Json,
-    /// Progress events, one JSON object per line; the last line is the result
+    /// Progress events as JSON lines; the last line is the result
     Ndjson,
 }
 
@@ -120,8 +133,10 @@ pub struct Global {
     pub no_color: bool,
 }
 
+// Listed in the order of typical use (clap keeps declaration order).
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    Setup(SetupArgs),
     Rename(RenameArgs),
     Apply(ApplyArgs),
     Undo(UndoArgs),
@@ -134,7 +149,6 @@ pub enum Command {
     Schema(SchemaArgs),
     #[command(subcommand)]
     Integrate(IntegrateCmd),
-    Setup(SetupArgs),
     Gui(GuiArgs),
 }
 
@@ -197,19 +211,20 @@ NETWORK:
 
 OUTPUT:
   text: `old.pdf -> new.pdf` per file and a summary.
-  json: the result (`schema result`); with --dry-run/--plan the plan
-  (`schema plan`). Each file has rename_status, enrich_status, learn_status.";
+  json: the result (`schema result`): each of `files[]` has rename_status,
+  enrich_status and learn_status. With --dry-run/--plan the plan
+  (`schema plan`): each of `items[]` has status, enrich and learn.";
 
 const RENAME_EXAMPLES: &str = "\
 EXAMPLES:
-  autorename-pdf rename invoice.pdf
-  autorename-pdf rename --dry-run -r ~/Documents/Inbox
-  autorename-pdf rename ~/Scans --ocr=auto --vision=auto
-  autorename-pdf rename *.pdf --provider anthropic --model claude-haiku-5-5
-  autorename-pdf rename ~/Scans --plan plan.json -o json   # then: apply plan.json
-  autorename-pdf --offline rename ~/Private                # local Ollama only";
+  autorename-pdf rename --dry-run ~/Scans           # preview first
+  autorename-pdf rename ~/Scans                     # then rename
+  autorename-pdf rename -r ~/Documents/Inbox        # include subfolders
+  autorename-pdf rename --plan plan.json ~/Scans    # then: apply plan.json
+  autorename-pdf rename --ocr=on --vision=off scan.pdf  # never send images
+  autorename-pdf --offline rename ~/Private         # local Ollama only";
 
-/// Extract, plan and rename PDFs (+ enrich, + learn)
+/// Rename PDFs from their content (preview with --dry-run)
 #[derive(Debug, Args)]
 #[command(long_about = RENAME_LONG, after_long_help = RENAME_EXAMPLES)]
 pub struct RenameArgs {
@@ -237,7 +252,7 @@ pub struct RenameArgs {
     /// Model id for this run [default: per-provider default from the config]
     #[arg(long, value_name = "ID")]
     pub model: Option<String>,
-    /// Offline OCR (`--ocr` = on; default auto = poor text layer); needs `models fetch`
+    /// Local OCR (`--ocr` = on; auto = poor text only); needs OCR models
     #[arg(
         long,
         value_enum,
@@ -247,7 +262,7 @@ pub struct RenameArgs {
         default_missing_value = "on"
     )]
     pub ocr: Option<Mode>,
-    /// Page images to the model (`--vision` = on; default auto = text + OCR still poor)
+    /// Send page images (`--vision` = on; auto = still poor after OCR)
     #[arg(
         long,
         value_enum,
@@ -297,7 +312,7 @@ EXAMPLES:
   autorename-pdf apply plan.json -o json
   autorename-pdf rename ~/Scans --dry-run -o json | autorename-pdf apply -";
 
-/// Execute a saved plan (no AI calls)
+/// Rename from a saved plan (no AI calls)
 #[derive(Debug, Args)]
 #[command(long_about = APPLY_LONG, after_long_help = APPLY_EXAMPLES)]
 pub struct ApplyArgs {
@@ -345,7 +360,7 @@ EXAMPLES:
   autorename-pdf undo --list -o json
   autorename-pdf undo --batch 20261107T101112-a1b2c3";
 
-/// Revert renames, enrichment and learned names of a batch
+/// Revert the last run: names, embedded data, learned names
 #[derive(Debug, Args)]
 #[command(long_about = UNDO_LONG, after_long_help = UNDO_EXAMPLES)]
 pub struct UndoArgs {
@@ -368,15 +383,26 @@ would run with the current settings.
 
 Works without a valid config (defaults are used for the thresholds).
 
+REUSE THE EXTRACTED DATA:
+  A renamed PDF carries an `autorename-pdf.json` attachment: the fields, the
+  page text that was used, profile and model. JSON output has it in
+  `.files[].embedded.attachment`, so scripts and other AI tools can use it
+  without extracting again. Any PDF tool reads the same file, e.g.
+  `qpdf --show-attachment=autorename-pdf.json FILE` or
+  `pdfdetach -save 1 -o data.json FILE`.
+
 NETWORK:
   None.";
 
 const INSPECT_EXAMPLES: &str = "\
 EXAMPLES:
   autorename-pdf inspect invoice.pdf
-  autorename-pdf inspect -o json *.pdf  # wildcards work in cmd/PowerShell too";
+  autorename-pdf inspect -o json *.pdf  # wildcards work in cmd/PowerShell too
+  autorename-pdf inspect -o json *.pdf |
+      jq -r '.files[].embedded.attachment.fields | [.document_date,
+             .company_name, .total_amount] | @csv'   # table of invoices";
 
-/// Show embedded data, signature/encryption and text quality
+/// Show a PDF's embedded data, text quality and signature state
 #[derive(Debug, Args)]
 #[command(long_about = INSPECT_LONG, after_long_help = INSPECT_EXAMPLES)]
 pub struct InspectArgs {
@@ -389,9 +415,18 @@ pub struct InspectArgs {
 // names
 // ---------------------------------------------------------------------------
 
-/// Maintain the name lists (Name matching: one spelling per name)
+const NAMES_EXAMPLES: &str = "\
+EXAMPLES:
+  autorename-pdf names list
+  autorename-pdf names review                          # flagged for a look
+  autorename-pdf names merge \"ACME Corp Holding\" ACME  # same company
+  autorename-pdf names rename \"ACME Corporation GmbH\" ACME  # new spelling
+
+Run `names <command> --help` for each command's options.";
+
+/// Keep names consistent: list, review, merge, rename
 #[derive(Debug, Args)]
-#[command(long_about = "\
+#[command(after_long_help = NAMES_EXAMPLES, long_about = "\
 Maintain the name lists used by Name matching: per harmonized field one file
 name-lists/<field>.yaml beside config.yaml (e.g. name-lists/company_name.yaml)
 with canonical names, hand-written `aliases` and auto-`learned` variants.
@@ -453,7 +488,7 @@ Refuses when NEW already belongs to another entry: merge instead.")]
     /// Merge entry FROM into INTO (FROM's names become aliases)
     #[command(after_long_help = "\
 EXAMPLES:
-  autorename-pdf names merge \"Acme Corp\" ACME
+  autorename-pdf names merge \"ACME Corp Holding\" ACME
   autorename-pdf names --field journal_name merge \"Nat. Phys.\" \"Nature Physics\"")]
     Merge {
         #[arg(value_name = "FROM")]
@@ -479,9 +514,19 @@ EXAMPLES:
 // config
 // ---------------------------------------------------------------------------
 
-/// Show, validate, locate or create the config
+const CONFIG_EXAMPLES: &str = "\
+EXAMPLES:
+  autorename-pdf config path              # where everything is stored
+  autorename-pdf config show              # effective config, key redacted
+  autorename-pdf config validate
+  autorename-pdf --config examples/academic.yaml config validate
+
+First-time setup is easier with `autorename-pdf setup` (see `setup --help`).
+Every key with its default: config.yaml.example in the repository.";
+
+/// Show, check, locate or create the config
 #[derive(Debug, Subcommand)]
-#[command(long_about = "\
+#[command(after_long_help = CONFIG_EXAMPLES, long_about = "\
 Show, validate, locate or create config.yaml.
 
 Discovery: --config > $AUTORENAME_PDF_CONFIG > OS config dir
@@ -495,7 +540,7 @@ pub enum ConfigCmd {
     Validate,
     /// Print config, .env, name lists, journal and models locations
     Path,
-    /// Write a commented starter config (refuses to overwrite without --force)
+    /// Write a commented starter config (--force overwrites)
     #[command(after_long_help = "\
 SIDE EFFECTS:
   Creates the config file (and its folder). Nothing else.
@@ -514,13 +559,21 @@ EXAMPLES:
 // models
 // ---------------------------------------------------------------------------
 
-/// Manage offline OCR model packs
+/// Download, import or remove offline OCR models
 #[derive(Debug, Subcommand)]
-#[command(long_about = "\
+#[command(
+    long_about = "\
 Manage offline OCR model packs (PP-OCRv6, hash-pinned). OCR never downloads
 models implicitly; without them `--ocr` fails with `ocr_models_missing`.
 
-Location: $AUTORENAME_MODELS_DIR, else <OS data dir>/autorename-pdf/models.")]
+Location: $AUTORENAME_MODELS_DIR, else <OS data dir>/autorename-pdf/models.",
+    after_long_help = "\
+EXAMPLES:
+  autorename-pdf models list
+  autorename-pdf models fetch                    # ~40 MB, online once
+  autorename-pdf models import /media/usb/models # air-gapped machine: copy
+                                                 # `models` from a connected one"
+)]
 pub enum ModelsCmd {
     /// List packs and their install state
     List,
@@ -536,8 +589,9 @@ EXAMPLES:
     },
     /// Install a pack from a local folder (offline machines; hash-verified)
     Import {
-        /// The pack folder (e.g. `.../models/latin`) or its parent `models`
-        /// folder, copied from a machine that ran `models fetch`
+        /// The pack folder (e.g. `.../models/latin`) or its `models` folder
+        ///
+        /// Copied from a machine that ran `models fetch`.
         #[arg(value_name = "DIR")]
         dir: PathBuf,
         /// Pack id [default: the pack for ocr.language]
@@ -596,11 +650,19 @@ With --rename-now (the file-manager \"Rename now\" entry) the files are
 analyzed and renamed right away when nothing needs a look: no errors, no
 company flagged for review. Otherwise the window stays in the preview so
 you can check the flagged rows first. Either way the result screen offers
-Undo. Config (enrich, learn, provider) applies as for `rename`.";
+Undo. Config (enrich, learn, provider) applies as for `rename`.
 
-/// Open the GUI (preview pre-loaded with PATHs)
+Without arguments on a desktop, `autorename-pdf` opens the same window.";
+
+const GUI_EXAMPLES: &str = "\
+EXAMPLES:
+  autorename-pdf gui
+  autorename-pdf gui ~/Scans
+  autorename-pdf gui --rename-now ~/Scans/invoice.pdf";
+
+/// Open the window, PATHs pre-loaded (default without arguments)
 #[derive(Debug, Args)]
-#[command(long_about = GUI_LONG)]
+#[command(long_about = GUI_LONG, after_long_help = GUI_EXAMPLES)]
 pub struct GuiArgs {
     /// Files or folders to preview
     #[arg(value_name = "PATH")]
@@ -608,8 +670,9 @@ pub struct GuiArgs {
     /// Rename right after the analysis unless a file needs review
     #[arg(long)]
     pub rename_now: bool,
-    /// Also open the paths listed in FILE (one per line, UTF-8), then delete
-    /// FILE (Windows launcher hand-off; only `req-*.txt` files)
+    /// Also open the paths listed in FILE, then delete FILE
+    ///
+    /// One path per line, UTF-8; only `req-*.txt` files (Windows launcher).
     #[arg(long, value_name = "FILE")]
     pub request_file: Option<PathBuf>,
 }
@@ -620,11 +683,11 @@ pub struct GuiArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DeciderArg {
-    /// Small structured call on the main provider (default)
+    /// Small call on the main provider (default)
     Ai,
     OpenaiDecisions,
     Jev,
-    /// Never ask: ambiguous names become `review: true` entries
+    /// Never ask: ambiguous names get `review: true`
     Off,
 }
 
@@ -689,12 +752,14 @@ EXAMPLES:
 
 FOR AGENTS:
   1. `setup --check -o json`; read `steps[]` (status `missing` + `hint`).
-  2. Ask the user only for the API key (or whether to run offline).
+  2. Ask the user only for the provider and API key (or offline with a
+     local Ollama) and their company name.
   3. `setup ... -o json`; exit 0 = ready, 3 = config still invalid (see the
      failed step's hint), 2 = bad flags, 1 = I/O error.
-  4. Verify: `autorename-pdf rename --dry-run examples/demo -o json`.";
+  4. Verify on a few PDFs: `rename --plan plan.json <paths> -o json` (exit 0),
+     show the proposed names, then `apply plan.json -o json`; `undo` reverts.";
 
-/// Set up config, API key, OCR models and desktop integration (idempotent)
+/// Set up provider, API key and your company (once; idempotent)
 #[derive(Debug, Args)]
 #[command(long_about = SETUP_LONG, after_long_help = SETUP_AFTER)]
 pub struct SetupArgs {
@@ -719,18 +784,20 @@ pub struct SetupArgs {
     /// Naming profile (business, academic, or a custom id)
     #[arg(long, value_name = "ID")]
     pub profile: Option<String>,
-    /// Read the API key from environment variable VAR; store VAR=... in .env
-    /// and `ai.api_key: "${VAR}"` in config.yaml
+    /// Read the API key from environment variable VAR
+    ///
+    /// Stores VAR=... in .env and `ai.api_key: "${VAR}"` in config.yaml.
     #[arg(long, value_name = "VAR")]
     pub api_key_env: Option<String>,
-    /// Read the API key from stdin (stored like --api-key-env, under VAR or
-    /// the provider's default variable, e.g. OPENAI_API_KEY)
+    /// Read the API key from stdin
+    ///
+    /// Stored like --api-key-env: under VAR, else e.g. OPENAI_API_KEY.
     #[arg(long)]
     pub api_key_stdin: bool,
     /// Company-name decider for ambiguous matches
     #[arg(long, value_enum, value_name = "NAME")]
     pub decider: Option<DeciderArg>,
-    /// Read the decider key from VAR (harmonization.decider_api_key: "${VAR}")
+    /// Read the decider key from VAR (decider_api_key: "${VAR}")
     #[arg(long, value_name = "VAR")]
     pub decider_key_env: Option<String>,
     /// With --offline: Ollama URL [default: http://localhost:11434]
@@ -767,7 +834,7 @@ pub struct IntegrateArgs {
     pub exe: Option<PathBuf>,
 }
 
-/// Add or remove desktop and file-manager integration
+/// Add or remove file-manager entries (Rename now / Preview)
 #[derive(Debug, Subcommand)]
 #[command(
     long_about = "\

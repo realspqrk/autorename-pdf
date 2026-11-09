@@ -606,6 +606,56 @@ fn help_snapshots() {
     insta::assert_snapshot!("rename_help", help(&["rename", "--help"]));
 }
 
+/// `--help` is pre-wrapped (clap does not wrap): no line over 80 columns.
+#[test]
+fn long_help_fits_80_columns() {
+    let commands: &[&[&str]] = &[
+        &[],
+        &["setup"],
+        &["rename"],
+        &["apply"],
+        &["undo"],
+        &["inspect"],
+        &["names"],
+        &["names", "list"],
+        &["names", "review"],
+        &["names", "rename"],
+        &["names", "merge"],
+        &["names", "add"],
+        &["config"],
+        &["config", "show"],
+        &["config", "validate"],
+        &["config", "path"],
+        &["config", "init"],
+        &["models"],
+        &["models", "list"],
+        &["models", "fetch"],
+        &["models", "import"],
+        &["models", "remove"],
+        &["schema"],
+        &["integrate"],
+        &["integrate", "install"],
+        &["integrate", "remove"],
+        &["integrate", "status"],
+        &["gui"],
+    ];
+    let mut long = Vec::new();
+    for cmd in commands {
+        let mut args = cmd.to_vec();
+        args.push("--help");
+        for line in help(&args).lines() {
+            if line.chars().count() > 80 {
+                long.push(format!("{args:?}: {line}"));
+            }
+        }
+    }
+    assert!(
+        long.is_empty(),
+        "help lines over 80 columns:\n{}",
+        long.join("\n")
+    );
+}
+
 #[test]
 fn every_command_has_long_help() {
     for args in [
@@ -1174,11 +1224,37 @@ fn own_company_is_never_the_counterparty_nor_learned() {
     let (code, v) = env.json(&["rename", "-o", "json", docs.to_str().unwrap()]);
     assert_eq!(code, 0, "{v:#}");
     assert_eq!(
-        v["files"][0]["name"], "20260315 ACME Corp AP EUR 1,234.56.pdf",
+        // The issuer as printed, minus its legal form.
+        v["files"][0]["name"],
+        "20260315 ACME AP EUR 1,234.56.pdf",
         "{v:#}"
     );
     let names = std::fs::read_to_string(env.path("cfg/name-lists/company_name.yaml")).unwrap();
     assert!(!names.contains("Test Company"), "{names}");
+}
+
+#[test]
+fn provider_override_uses_that_providers_key_variable() {
+    let env = Env::new(
+        "config_version: 4\nai:\n  provider: openai\n  api_key: \"${OPENAI_API_KEY}\"\ncompany:\n  name: Test Company\n",
+    );
+    std::fs::write(env.path("cfg/.env"), "OPENAI_API_KEY=sk-openai-test\n").unwrap();
+    env.add_doc("text_invoice_acme.pdf");
+    let out = env
+        .cmd()
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .args(["rename", "--provider", "anthropic", "-o", "json"])
+        .arg(env.docs())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    // Never the OpenAI key sent to Anthropic: a config error naming the variable.
+    assert_eq!(out.status.code(), Some(3), "{v:#}");
+    let hint = v["error"]["hint"].as_str().unwrap();
+    assert!(hint.contains("ANTHROPIC_API_KEY"), "{hint}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("OPENAI_API_KEY"), "{stderr}");
 }
 
 #[test]
