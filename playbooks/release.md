@@ -53,6 +53,18 @@ Azure Trusted Signing (Artifact Signing), ported from 3.x `build.py`:
 - Manual signing: `cargo xtask sign <file>...` (sha256, timestamp `http://timestamp.acs.microsoft.com`).
 - Verify with `signtool verify /pa /v <file>`. `pdfium.dll` (third party) is not signed by us.
 
+### Local signed build in the Windows VM
+Validated for 4.0.0 (Linux has no `makensis` host that can sign the uninstaller, so build natively). Toolchain, once per VM (each as a `vm.sh run` job):
+- `winget install -e --silent --accept-source-agreements --accept-package-agreements` with `Rustlang.Rustup`, `Microsoft.AzureCLI`, `Git.Git`, and MSVC Build Tools (`windows-vm` skill).
+- Signing dlib: download the NuGet package `Microsoft.Trusted.Signing.Client` (a zip) and extract it to `C:\ats\pkg`. `AZURE_CODE_SIGNING_DLIB=C:\ats\pkg\bin\x64\Azure.CodeSigning.Dlib.dll`.
+- signtool: `C:\Program Files (x86)\Windows Kits\10\bin\<sdk>\x64\signtool.exe`.
+- Code: `git bundle create ~/Windows/arp.bundle <branch>`, then clone the bundle to `C:\src\arp` in the guest.
+
+Then:
+1. The user runs `az login` in a PowerShell window in the RDP session. The runner runs in that same session, so it shares the CLI login. Check it with `az account get-access-token --resource https://codesigning.azure.net --query expiresOn -o tsv`.
+2. Run the build detached. It takes longer than the 10-minute `vm.sh run` timeout (about 20 min cold). A script in `~/Windows` sets `AWS_LC_SYS_PREBUILT_NASM=1`, `AZURE_CODE_SIGNING_DLIB` and `SIGNTOOL`, runs `cargo xtask dist --sign 2>&1 | % { "$_" } | Out-File -Append -Encoding ascii \\host.lan\Data\<log>`, and ends with an `exit $LASTEXITCODE` line. Start it with `Start-Process powershell -File <local copy> -WindowStyle Hidden`, then wait on the log from the host. Plain `*>>` writes UTF-16, which is hard to grep.
+3. `signtool verify /pa /v` on `autorename-pdf.exe`, `autorename-pdf-gui.exe`, `uninstall.exe` (from the install dir) and the setup exe.
+
 ## 5. Verify, checksums, publish
 1. Run `sha256sum -c SHA256SUMS` in each `target/dist/<triple>/`.
 2. Windows: follow [windows-vm-validation.md](windows-vm-validation.md) (install, context menu, CLI smoke, uninstall).

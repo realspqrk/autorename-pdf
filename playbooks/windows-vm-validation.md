@@ -15,7 +15,7 @@ Uses the Omarchy Windows VM. Drive it with the `windows-vm` skill: `vm.sh` is in
 - [7. Uninstall](#7-uninstall)
 
 ## 1. Build
-- Signed build, on a Windows host: `cargo xtask dist --sign`.
+- Signed build, on a Windows host or in the VM: `cargo xtask dist --sign` ([release.md](release.md), Local signed build in the Windows VM).
 - Unsigned test build from Linux (needs `makensis`): `cargo xtask dist --target x86_64-pc-windows-msvc`.
 - Without makensis, test the bare exes instead: `cargo xtask dist --target x86_64-pc-windows-msvc --no-package`. Then use `target/dist/x86_64-pc-windows-msvc/stage/{bin,res}` and run `integrate install` by hand (step 3b).
 
@@ -82,7 +82,7 @@ Expected values:
 
 ## 6. Context menu (visual)
 - Restart Explorer so the HKCU verbs load: `Stop-Process -Name explorer -Force` (it restarts on its own).
-- Ask the user to right-click a PDF and a folder. Windows 11 shows the entries under "Show more options". Expect "AutoRename-PDF" (red icon) > "Rename now" and "Preview in AutoRename-PDF…".
+- Ask the user to right-click a PDF and a folder (the folder item itself; empty space inside a folder has no entry by design). Windows 11 shows the entries under "Show more options". Expect "AutoRename-PDF" (red icon) > "Rename now" and "Preview in AutoRename-PDF…".
 - Multi-select test: select 5 PDFs and choose "Preview…". Exactly one window must open listing all 5, because the launcher coalesces Explorer's one-process-per-file launches.
 - Scripted variant of the same test, as one job:
   ```powershell

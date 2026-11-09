@@ -4,7 +4,6 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 ## TOC
 
-- [Before the v4.0 release](#before-the-v40-release)
 - [Validation gaps](#validation-gaps)
 - [Scanner / image ingest](#scanner--image-ingest)
 - [Enrichment](#enrichment)
@@ -12,12 +11,6 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 - [Decision models](#decision-models)
 - [Packaging and OS integration](#packaging-and-os-integration)
 - [Auto-updater](#auto-updater)
-
-## Before the v4.0 release
-
-Queued by the owner on 2026-11-08, in this order.
-
-- **F4 Release prep**: audit open aspects; final Linux build (AppImage/deb/pacman) + binary; Windows build and Azure Artifact Signing in the VM (`cargo xtask sign` mirrors electron-workspace: signtool `/dlib Azure.CodeSigning.Dlib.dll /dmdf metadata.json`, timestamp `http://timestamp.acs.microsoft.com`; VM needs Windows SDK signtool, Artifact Signing Client Tools, `metadata.json`, an Azure login); macOS build + notarization on a separate Mac (written guidance).
 
 ## Validation gaps
 

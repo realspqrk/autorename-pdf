@@ -35,6 +35,8 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 ## Windows VM
 - `omarchy-windows-vm` (dockurr/windows) needs root Docker via polkit; the user launches it. No SSH/WinRM (only 3389/8006). Use the global `windows-vm` skill (shared-folder job runner, host `~/Windows` = guest `\\host.lan\Data`, mode 700).
 - The runner uses `Start-Process -Wait`, which in PS 5.1 waits for the whole process tree: a GUI started in a job blocks the runner until the window closes. End such jobs with `Get-Process autorename-pdf -EA 0 | Stop-Process -Force`. Inside `vm.sh run '...'` avoid inner single quotes (e.g. WQL filters): bash eats them.
+- Jobs longer than the 10-min `vm.sh run` timeout (release build ~20 min cold): `Start-Process powershell -File <local copy> -WindowStyle Hidden`, log to `\\host.lan\Data`, wait on the log from the host. PS 5.1 `*>>` writes UTF-16 (grep fails); pipe `2>&1 | % { "$_" } | Out-File -Append -Encoding ascii` instead.
+- Signing in the VM: the runner lives in the user's RDP session, so an `az login` the user runs there is visible to jobs (check: `az account get-access-token --resource https://codesigning.azure.net`). Route: `playbooks/release.md` (Local signed build in the Windows VM).
 - Windows `std::fs::canonicalize` returns `\\?\C:\…`; Explorer `Icon`/command values must not contain it (`integrate::self_exe` strips it).
 
 ## Config & harmonization
@@ -133,7 +135,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - cargo-packager `--config <file>` chdirs to the file's folder; `xtask dist` passes the config as raw JSON so relative paths stay repo-relative. Without `--config` it globs `**/packager.toml` through the whole tree, `target/` included.
 - Packager keys: `NsisConfig` aliases are inconsistent; `install-mode` is rejected, use `installMode`.
 - `windows.signCommand` is split on spaces: use a command without spaces in its path (`cargo xtask sign %1`).
-- Linux has no `makensis` (Arch has no `nsis` package). cargo-packager on Linux calls the system `makensis` with its downloaded NSIS 3.09 toolset as plugin dir. Release installers are built on Windows.
+- Linux has no `makensis` (Arch has no `nsis` package). cargo-packager on Linux calls the system `makensis` with its downloaded NSIS 3.09 toolset as plugin dir. Release installers are built on Windows (CI, or natively in the VM: `playbooks/release.md`).
 - cargo-packager's AppImage AppRun (tauri `apprun-old`) runs the embedded `.desktop` `Exec=` and puts the user's args at `%F`, so every call (mounted or `--appimage-extract`ed `AppRun`) arrives as `autorename-pdf gui <args>`. `xtask dist` points `XDG_CACHE_HOME` at `target/dist/<triple>/packager-cache`, seeded with our pass-through `packaging/linux/AppRun` (cargo-packager only downloads tools that are missing). The `.desktop` keeps `gui %F` explicitly.
 - Refresh `icon-theme.cache` / `mimeinfo.cache` only when one exists; creating one leaves a file behind after `integrate remove`.
 - Nautilus ignores icons for scripts and extension items; scripts get paths in `NAUTILUS_SCRIPT_SELECTED_FILE_PATHS` and need no restart. Thunar needs `thunar -q`; in `uca.xml` match `<action>` exactly (`<actions>` also starts with `<action`), our blocks carry `<unique-id>autorename-pdf-…`. Dolphin (KF6) service menus must be executable or are ignored silently.
