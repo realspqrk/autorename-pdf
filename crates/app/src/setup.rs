@@ -12,7 +12,7 @@ use autorename_core::pipeline::SCHEMA_VERSION;
 use autorename_core::{Error, ExitCode, Result, fsx, ocr};
 use serde::Serialize;
 
-use crate::cli::{ProviderArg, SetupArgs};
+use crate::cli::SetupArgs;
 use crate::cmd::{Ctx, STARTER_CONFIG, models_root};
 use crate::out::{Style, pad};
 
@@ -86,13 +86,10 @@ impl Step {
     }
 }
 
+/// The provider's standard key variable; `OPENAI_API_KEY` for a key given
+/// to Ollama (an authenticating proxy).
 fn default_key_var(provider: &str) -> &'static str {
-    match provider {
-        "anthropic" => "ANTHROPIC_API_KEY",
-        "gemini" => "GEMINI_API_KEY",
-        "xai" => "XAI_API_KEY",
-        _ => "OPENAI_API_KEY",
-    }
+    config::default_key_var(provider).unwrap_or("OPENAI_API_KEY")
 }
 
 fn valid_var(name: &str) -> bool {
@@ -305,10 +302,7 @@ fn plan_edits(a: &SetupArgs, ctx: &Ctx<'_>, d: &mut Draft) -> Result<()> {
             // The key follows the provider (like the GUI): the new
             // provider's variable, empty for Ollama. --api-key-* below may
             // set it again.
-            let key = match p {
-                ProviderArg::Ollama => String::new(),
-                _ => format!("${{{}}}", default_key_var(p.id())),
-            };
+            let key = config::default_key_ref(p.id());
             edits.push((Some("ai"), "api_key", q(&key)));
         }
         d.edit("provider", &edits);
@@ -611,13 +605,7 @@ fn ocr_step(text: &str, check: bool, offline: bool, ctx: &Ctx<'_>) -> Step {
     match ocr::models::fetch(
         &root,
         pack,
-        &mut |p| {
-            out.progress(&format!(
-                "Downloading {} {:.1} MB",
-                p.file,
-                p.downloaded as f64 / 1e6
-            ));
-        },
+        &mut |p| out.progress_bytes(&format!("Downloading {}", p.file), p.downloaded, p.total),
         None,
     ) {
         Ok(()) => {

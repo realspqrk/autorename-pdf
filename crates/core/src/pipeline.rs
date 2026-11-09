@@ -724,19 +724,30 @@ pub fn derive_direction(
         is_my_company(&issuer, company),
         is_my_company(&recipient, company),
     );
-    // Counterparty: the side that is not me (never my own company).
+    // Counterparty: the model's answer unless it is empty or my own company;
+    // then the side that is not me, without its legal form (the field asks
+    // for none, issuer/recipient are as printed).
     if let Some(cp) = &d.counterparty {
+        let answer = get(cp);
+        let mine = is_my_company(&answer, company);
         let other = match (me_issuer, me_recipient) {
             (true, false) => Some(&recipient),
             (false, true) => Some(&issuer),
             _ => None,
         };
-        if let Some(other) = other.filter(|o| !o.is_empty()) {
-            fields.insert(cp.clone(), Value::String(other.clone()));
-        } else if is_my_company(&get(cp), company) {
-            return Some(format!(
-                "direction_uncertain: the model named {company:?} (your own company) as the counterparty and issuer/recipient do not resolve it (issuer {issuer:?}, recipient {recipient:?}); please review"
-            ));
+        if answer.is_empty() || mine {
+            match other.filter(|o| !o.is_empty()) {
+                Some(o) => {
+                    let name = harmonize::strip_legal_form(o);
+                    fields.insert(cp.clone(), Value::String(name));
+                }
+                None if mine => {
+                    return Some(format!(
+                        "direction_uncertain: the model named {company:?} (your own company) as the counterparty and issuer/recipient do not resolve it (issuer {issuer:?}, recipient {recipient:?}); please review"
+                    ));
+                }
+                None => {}
+            }
         }
     }
     if current != d.incoming && current != d.outgoing {
@@ -1947,14 +1958,38 @@ mod tests {
                 w,
             )
         };
-        // The model put my company as counterparty: fixed from issuer.
+        // The model's counterparty is kept (legal form stripped as asked).
+        assert_eq!(
+            run(
+                "ACME Corporation",
+                "AP",
+                "ACME Corporation GmbH",
+                "Spqrk GmbH"
+            ),
+            ("ACME Corporation".into(), "AP".into(), None)
+        );
+        // The model put my company as counterparty: the other side, without
+        // its printed legal form.
         assert_eq!(
             run("Spqrk GmbH", "AR", "ACME Corp", "Spqrk GmbH"),
-            ("ACME Corp".into(), "AP".into(), None)
+            ("ACME".into(), "AP".into(), None)
         );
         assert_eq!(
-            run("Spqrk", "AP", "Spqrk", "Wayne Enterprises"),
+            run("Spqrk", "AP", "Spqrk", "Wayne Enterprises Inc."),
             ("Wayne Enterprises".into(), "AR".into(), None)
+        );
+        // No counterparty: the other side, stripped.
+        assert_eq!(
+            run("", "AP", "Mustermann Consulting GmbH", "Spqrk GmbH"),
+            ("Mustermann Consulting".into(), "AP".into(), None)
+        );
+        assert_eq!(
+            run("", "AP", "ACME,Inc.", "Spqrk GmbH"),
+            ("ACME".into(), "AP".into(), None)
+        );
+        assert_eq!(
+            run("", "AP", "Initech Solutions (AG)", "Spqrk GmbH"),
+            ("Initech Solutions".into(), "AP".into(), None)
         );
         // Unresolvable and the guess is me → kept + warning.
         let (cp, _, w) = run("Spqrk", "Letter", "", "");

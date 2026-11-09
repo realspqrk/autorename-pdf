@@ -64,6 +64,8 @@ pub struct Out {
     err_tty: bool,
     /// A `\r` progress line is on stderr and must be cleared first.
     progress_line: Mutex<bool>,
+    /// Last [`Out::progress_bytes`] line (repeats are dropped).
+    metered: Mutex<String>,
     /// A document could not be serialized (exit 1 instead of success).
     output_failed: std::sync::atomic::AtomicBool,
     /// Global flags every suggested command must repeat (`--config`, `--offline`).
@@ -81,6 +83,7 @@ impl Out {
             color_err: color && std::io::stderr().is_terminal(),
             err_tty: std::io::stderr().is_terminal(),
             progress_line: Mutex::new(false),
+            metered: Mutex::new(String::new()),
             output_failed: std::sync::atomic::AtomicBool::new(false),
             suggest_prefix: suggest_prefix(g),
         }
@@ -189,6 +192,17 @@ impl Out {
             *on = true;
         } else {
             eprintln!("{s}");
+        }
+    }
+
+    /// Measured progress (`done` of `total` bytes) of `label`: every 0.1 MB
+    /// on a terminal, else one line per 10 % (logs, pipes, agents).
+    pub fn progress_bytes(&self, label: &str, done: u64, total: u64) {
+        let line = metered_line(label, done, total, self.err_tty);
+        let mut last = self.metered.lock().unwrap_or_else(|p| p.into_inner());
+        if *last != line {
+            self.progress(&line);
+            *last = line;
         }
     }
 
@@ -457,8 +471,38 @@ pub fn ellipsize(s: &str, max: usize) -> String {
     out
 }
 
+/// One [`Out::progress_bytes`] line: MB done on a terminal (redrawn in
+/// place), else 10 % steps.
+fn metered_line(label: &str, done: u64, total: u64, tty: bool) -> String {
+    let mb = |b: u64| b as f64 / 1e6;
+    if tty {
+        format!("{label} {:.1}/{:.1} MB", mb(done), mb(total))
+    } else {
+        let pct = (done.saturating_mul(100) / total.max(1)).min(100) / 10 * 10;
+        format!("{label} {pct}% of {:.1} MB", mb(total))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn byte_progress_is_throttled_off_a_terminal() {
+        let total = 39_000_000u64;
+        let distinct = |tty: bool| {
+            let mut lines: Vec<String> = (1..=total.div_ceil(65_536))
+                .map(|i| super::metered_line("Downloading x", (i * 65_536).min(total), total, tty))
+                .collect();
+            lines.dedup();
+            lines
+        };
+        let piped = distinct(false);
+        assert_eq!(piped.len(), 11, "{piped:?}");
+        assert_eq!(piped[0], "Downloading x 0% of 39.0 MB");
+        assert_eq!(piped[10], "Downloading x 100% of 39.0 MB");
+        // A terminal redraws one line in place, every 0.1 MB.
+        assert!(distinct(true).len() > 300);
+    }
+
     use super::*;
 
     #[test]

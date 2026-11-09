@@ -21,6 +21,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
+use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
 
 use chrono::NaiveDate;
 use indexmap::IndexMap;
@@ -466,19 +467,89 @@ pub fn normalize_generic(name: &str) -> String {
         .join(" ")
 }
 
-/// NFKC, casefold, drop punctuation, strip trailing legal-form tokens, collapse spaces.
-pub fn normalize_company(name: &str) -> String {
-    let folded = casefold(name);
-    let mapped: String = folded
+/// Casefold, drop periods/apostrophes, every other non-alphanumeric → space.
+fn company_fold(name: &str) -> String {
+    casefold(name)
         .chars()
         .filter(|c| !matches!(c, '.' | '\'' | '’' | '`' | '´'))
         .map(|c| if c.is_alphanumeric() { c } else { ' ' })
-        .collect();
+        .collect()
+}
+
+/// NFKC, casefold, drop punctuation, strip trailing legal-form tokens, collapse spaces.
+pub fn normalize_company(name: &str) -> String {
+    let mapped = company_fold(name);
     let mut tokens: Vec<&str> = mapped.split_whitespace().collect();
     while tokens.len() > 1 && tokens.last().is_some_and(|t| LEGAL_SUFFIXES.contains(t)) {
         tokens.pop();
     }
     tokens.join(" ")
+}
+
+/// `name` as written, minus the trailing legal-form words that
+/// [`normalize_company`] ignores, split at the same punctuation
+/// (`ACME Corp. GmbH` → `ACME`, `Müller GmbH & Co. KG` → `Müller`,
+/// `ACME,Inc.` → `ACME`). Never empties a name; `normalize_company` of the
+/// result equals that of `name` (spaces collapsed).
+pub fn strip_legal_form(name: &str) -> String {
+    // Byte ranges of the tokens `company_fold` keeps (periods and
+    // apostrophes join, every other non-alphanumeric splits). Combining
+    // marks belong to their letter (`Cafe\u{301}` is `Café` after NFKC).
+    let joins = |c: char| {
+        c.is_alphanumeric()
+            || matches!(c, '.' | '\'' | '’' | '`' | '´')
+            || c.general_category_group() == GeneralCategoryGroup::Mark
+    };
+    let mut tokens: Vec<(usize, String)> = Vec::new();
+    let mut at: Option<usize> = None;
+    for (i, c) in name.char_indices().chain([(name.len(), ' ')]) {
+        match (at, joins(c)) {
+            (None, true) => at = Some(i),
+            (Some(st), false) => {
+                let folded = company_fold(&name[st..i]);
+                if !folded.trim().is_empty() {
+                    tokens.push((st, folded));
+                }
+                at = None;
+            }
+            _ => {}
+        }
+    }
+    let legal = |f: &str| f.split_whitespace().all(|t| LEGAL_SUFFIXES.contains(&t));
+    let mut cut = name.len();
+    while tokens.len() > 1 && tokens.last().is_some_and(|(_, f)| legal(f)) {
+        cut = tokens.pop().map_or(cut, |(st, _)| st);
+    }
+    let mut out = name[..cut].split_whitespace().collect::<Vec<_>>().join(" ");
+    if cut < name.len() {
+        // Drop the removed suffix's separators and wrappers (`, `, `-`,
+        // `(`, `，`), but keep a bracket that closes one in the name.
+        while let Some(c) = out.chars().last() {
+            if joins(c) || closes_open_bracket(&out[..out.len() - c.len_utf8()], c) {
+                break;
+            }
+            out.pop();
+        }
+    }
+    out
+}
+
+/// `c` closes a bracket left open in `before` (`Foo (Europe` + `)`).
+fn closes_open_bracket(before: &str, c: char) -> bool {
+    const PAIRS: [(char, char); 7] = [
+        ('(', ')'),
+        ('[', ']'),
+        ('{', '}'),
+        ('（', '）'),
+        ('［', '］'),
+        ('【', '】'),
+        ('「', '」'),
+    ];
+    PAIRS.iter().any(|&(open, close)| {
+        c == close
+            && before.chars().filter(|&x| x == open).count()
+                > before.chars().filter(|&x| x == close).count()
+    })
 }
 
 fn indel_ratio(a: &str, b: &str) -> f64 {
@@ -1094,6 +1165,37 @@ mod tests {
         ];
         for (input, expected) in table {
             assert_eq!(normalize_company(input), expected, "{input}");
+        }
+    }
+
+    #[test]
+    fn legal_form_stripped_as_written() {
+        let table = [
+            ("ACME Corporation GmbH", "ACME"),
+            ("Müller GmbH & Co. KG", "Müller"),
+            ("ACME, Inc.", "ACME"),
+            ("Müller e.U.", "Müller"),
+            ("Société Générale SA", "Société Générale"),
+            ("Wayne Enterprises", "Wayne Enterprises"),
+            ("GmbH", "GmbH"),
+            ("  O'Reilly   Media, Inc. ", "O'Reilly Media"),
+            ("ACME,Inc.", "ACME"),
+            ("ACME-GmbH", "ACME"),
+            ("A.C.M.E. GmbH", "A.C.M.E."),
+            ("Foo (Europe) Ltd", "Foo (Europe)"),
+            ("ACME (GmbH)", "ACME"),
+            ("ACME [Inc.]", "ACME"),
+            ("ACME，Inc.", "ACME"),
+            ("Foo (Europe) (Ltd)", "Foo (Europe)"),
+            ("Cafe\u{301} GmbH", "Cafe\u{301}"),
+        ];
+        for (input, expected) in table {
+            assert_eq!(strip_legal_form(input), expected, "{input}");
+            assert_eq!(
+                normalize_company(&strip_legal_form(input)),
+                normalize_company(input),
+                "{input}"
+            );
         }
     }
 

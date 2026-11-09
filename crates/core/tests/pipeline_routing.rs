@@ -164,7 +164,8 @@ fn missing_counterparty_is_flagged_for_review() {
     assert_eq!(item.tier, Some(Tier::Text));
 }
 
-/// My company as issuer with a recipient is a normal outgoing invoice.
+/// My company as issuer with a recipient is a normal outgoing invoice; the
+/// model's counterparty (no legal form) is kept over the printed recipient.
 #[test]
 fn outgoing_invoice_needs_no_review() {
     let mock = serve(Arc::new(|_| {
@@ -178,7 +179,7 @@ fn outgoing_invoice_needs_no_review() {
         &settings(&mock.url, json!("auto"), 0.8),
     );
     assert_eq!(mock.requests().len(), 1);
-    assert_eq!(item.company.as_deref(), Some("Wayne Enterprises Inc."));
+    assert_eq!(item.company.as_deref(), Some("Wayne Enterprises"));
     assert_eq!(item.fields["document_type"], "AR");
     assert!(item.warnings.is_empty(), "{:?}", item.warnings);
     assert_eq!(item.tier, Some(Tier::Text));

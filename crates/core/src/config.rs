@@ -41,6 +41,24 @@ pub fn default_model(provider: &str) -> Option<&'static str> {
     }
 }
 
+/// The standard API-key variable of a provider (`None` for Ollama), used
+/// whenever the provider changes (`setup --provider`, `rename --provider`).
+pub fn default_key_var(provider: &str) -> Option<&'static str> {
+    match provider {
+        "openai" => Some("OPENAI_API_KEY"),
+        "anthropic" => Some("ANTHROPIC_API_KEY"),
+        "gemini" => Some("GEMINI_API_KEY"),
+        "xai" => Some("XAI_API_KEY"),
+        _ => None,
+    }
+}
+
+/// `ai.api_key` for a newly chosen provider: `${VAR}` of its
+/// [`default_key_var`], empty for Ollama.
+pub fn default_key_ref(provider: &str) -> String {
+    default_key_var(provider).map_or(String::new(), |v| format!("${{{v}}}"))
+}
+
 /// Defaults tree (key order = `config show` order). `ai.model` is filled
 /// from [`default_model`] after merge when the user did not set it.
 pub fn defaults() -> Value {
@@ -430,8 +448,15 @@ pub fn read_dotenv(config_path: &Path) -> HashMap<String, String> {
 
 /// Load with the process environment; `.env` beside the config fills gaps only.
 pub fn load(path: &Path) -> Result<LoadedConfig> {
+    load_with_overrides(path, &Overrides::default())
+}
+
+/// [`load`] with one-run overrides applied to the file's values before
+/// `${VAR}` expansion, as if the file said so (a new provider brings its own
+/// key variable, see [`apply_overrides`]).
+pub fn load_with_overrides(path: &Path, o: &Overrides) -> Result<LoadedConfig> {
     let dotenv = read_dotenv(path);
-    load_with_env(path, &|name| {
+    load_inner(path, o, &|name| {
         std::env::var(name)
             .ok()
             .or_else(|| dotenv.get(name).cloned())
@@ -440,6 +465,14 @@ pub fn load(path: &Path) -> Result<LoadedConfig> {
 
 /// Load with an injected variable lookup (tests).
 pub fn load_with_env(path: &Path, env: &dyn Fn(&str) -> Option<String>) -> Result<LoadedConfig> {
+    load_inner(path, &Overrides::default(), env)
+}
+
+fn load_inner(
+    path: &Path,
+    o: &Overrides,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<LoadedConfig> {
     let display = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     if !path.is_file() {
         return Err(Error::config_hint(
@@ -454,7 +487,7 @@ pub fn load_with_env(path: &Path, env: &dyn Fn(&str) -> Option<String>) -> Resul
             "Fix the YAML syntax (duplicate keys are errors).",
         )
     })?;
-    let (tree, notices) = from_raw(raw, env)?;
+    let (tree, notices) = from_raw_with(raw, o, env)?;
     Ok(LoadedConfig {
         path: path.to_path_buf(),
         tree,
@@ -464,12 +497,30 @@ pub fn load_with_env(path: &Path, env: &dyn Fn(&str) -> Option<String>) -> Resul
 
 /// Parsed YAML → merged, env-expanded tree + notices. An empty document is `{}`.
 pub fn from_raw(raw: Value, env: &dyn Fn(&str) -> Option<String>) -> Result<(Value, Vec<Issue>)> {
+    from_raw_with(raw, &Overrides::default(), env)
+}
+
+/// [`from_raw`] with one-run overrides applied before expansion.
+pub fn from_raw_with(
+    raw: Value,
+    o: &Overrides,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<(Value, Vec<Issue>)> {
     let raw = match raw {
         Value::Null => Value::Object(Map::new()),
         v @ Value::Object(_) => v,
         _ => return Err(Error::config("Config file must be a YAML mapping")),
     };
     let mut tree = deep_merge(&defaults(), &raw);
+    // The effective provider decides whether an override changes it
+    // (`provider: ${PROVIDER}`); an unset variable stays literal and still
+    // gets its notice below.
+    let provider = str_at(&tree, "ai", "provider");
+    if provider.contains("${") {
+        let provider = expand_env(provider, env).0;
+        set_in(&mut tree, "ai", "provider", json!(provider));
+    }
+    apply_overrides(&mut tree, o);
     let mut notices = Vec::new();
     // Expand on the parsed tree (no YAML injection) before provider-dependent
     // defaults, so `provider: ${PROVIDER}` picks the right default model.
@@ -698,7 +749,10 @@ pub fn provider_issues(config: &Value) -> Vec<Issue> {
                 "ai.api_key",
                 "API key still contains an unexpanded ${VAR} reference",
             )
-            .hint("Set the variable in the environment or in .env beside config.yaml."),
+            .hint(format!(
+                "Set {} in the environment or in .env beside config.yaml.",
+                expand_env(api_key, &|_| None).1.join(", ")
+            )),
         );
     }
     if PLACEHOLDER_API_KEYS.contains(&api_key.trim().to_lowercase().as_str()) {
@@ -914,23 +968,28 @@ fn set_in(tree: &mut Value, section: &str, key: &str, value: Value) {
     }
 }
 
+/// Apply one-run overrides. A provider different from the configured one
+/// brings its own defaults, exactly like `setup --provider`: its default
+/// model (unless `model` is given), its default endpoint and its standard
+/// key variable (`${ANTHROPIC_API_KEY}`; none for Ollama). Apply before
+/// `${VAR}` expansion ([`load_with_overrides`]) so that reference resolves;
+/// on an expanded tree only the Ollama switch (`offline`) is complete.
 pub fn apply_overrides(tree: &mut Value, o: &Overrides) {
     if o.offline {
         apply_offline_override(tree);
     }
-    if let Some(p) = &o.provider {
-        let old = str_at(tree, "ai", "provider").to_string();
-        let model_was_default = default_model(&old) == Some(str_at(tree, "ai", "model"));
+    if let Some(p) = &o.provider
+        && str_at(tree, "ai", "provider") != p
+    {
         set_in(tree, "ai", "provider", json!(p));
-        // A model that was only the old provider's default follows the new provider.
-        if o.model.is_none() && model_was_default {
-            set_in(
-                tree,
-                "ai",
-                "model",
-                default_model(p).map_or(json!(""), Value::from),
-            );
-        }
+        set_in(
+            tree,
+            "ai",
+            "model",
+            default_model(p).map_or(json!(""), Value::from),
+        );
+        set_in(tree, "ai", "base_url", json!(""));
+        set_in(tree, "ai", "api_key", json!(default_key_ref(p)));
     }
     if let Some(m) = &o.model {
         set_in(tree, "ai", "model", json!(m));
@@ -949,9 +1008,9 @@ pub fn apply_overrides(tree: &mut Value, o: &Overrides) {
     }
 }
 
-/// `--offline`: privacy offline + provider ollama (model follows when it was
-/// the old provider's default). Remaining violations (remote base_url, cloud
-/// decider) still fail validation.
+/// `--offline`: privacy offline + provider ollama (from another provider:
+/// its default model, local endpoint, no key). Remaining violations (a
+/// remote Ollama base_url, cloud decider) still fail validation.
 pub fn apply_offline_override(tree: &mut Value) {
     if str_at(tree, "ai", "provider") != "ollama" {
         apply_overrides(
@@ -1696,6 +1755,116 @@ mod tests {
     }
 
     #[test]
+    fn provider_override_brings_its_own_key_endpoint_and_model() {
+        let env = |n: &str| match n {
+            "OPENAI_API_KEY" => Some("sk-openai".to_string()),
+            "ANTHROPIC_API_KEY" => Some("sk-ant".to_string()),
+            _ => None,
+        };
+        let raw = json!({"ai": {"provider": "openai", "model": "gpt-custom", "api_key": "${OPENAI_API_KEY}", "base_url": "https://gw.example.com/v1"}, "company": {"name": "Acme"}});
+        let run = |o: Overrides| from_raw_with(raw.clone(), &o, &env).unwrap();
+        let ai = |t: &Value| {
+            let a = &t["ai"];
+            (
+                a["provider"].as_str().unwrap().to_string(),
+                a["model"].as_str().unwrap().to_string(),
+                a["api_key"].as_str().unwrap().to_string(),
+                a["base_url"].as_str().unwrap().to_string(),
+            )
+        };
+        let anthropic = |model: Option<&str>| Overrides {
+            provider: Some("anthropic".into()),
+            model: model.map(str::to_string),
+            ..Default::default()
+        };
+        assert_eq!(
+            ai(&run(anthropic(None)).0),
+            (
+                "anthropic".into(),
+                "claude-haiku-5-5".into(),
+                "sk-ant".into(),
+                "".into()
+            )
+        );
+        assert_eq!(ai(&run(anthropic(Some("claude-x"))).0).1, "claude-x");
+        // The same provider changes nothing.
+        let same = run(Overrides {
+            provider: Some("openai".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            ai(&same.0),
+            (
+                "openai".into(),
+                "gpt-custom".into(),
+                "sk-openai".into(),
+                "https://gw.example.com/v1".into()
+            )
+        );
+        // Missing variable: the error names it; no notice about the old one.
+        let (tree, notices) = run(Overrides {
+            provider: Some("gemini".into()),
+            ..Default::default()
+        });
+        assert!(
+            notices.iter().all(|n| !n.message.contains("OPENAI")),
+            "{notices:?}"
+        );
+        let err = settings(&tree, None)
+            .unwrap()
+            .require_provider()
+            .unwrap_err();
+        assert!(err.to_string().contains("unexpanded"), "{err}");
+        assert!(
+            err.hint().unwrap_or_default().contains("GEMINI_API_KEY"),
+            "{err:?}"
+        );
+        // An env-selected provider equal to the override is no change:
+        // literal key, custom model and endpoint stay.
+        let env2 = |n: &str| (n == "PROVIDER").then(|| "anthropic".to_string());
+        let raw2 = json!({"ai": {"provider": "${PROVIDER}", "model": "claude-x", "api_key": "sk-literal", "base_url": "https://gw.example.com"}});
+        let (t, _) = from_raw_with(raw2, &anthropic(None), &env2).unwrap();
+        assert_eq!(
+            ai(&t),
+            (
+                "anthropic".into(),
+                "claude-x".into(),
+                "sk-literal".into(),
+                "https://gw.example.com".into()
+            )
+        );
+        let env3 = |n: &str| (n == "PROVIDER").then(|| "ollama".to_string());
+        let raw3 = json!({"ai": {"provider": "${PROVIDER}", "model": "qwen9", "base_url": "http://192.168.1.5:11434"}});
+        let ollama = Overrides {
+            provider: Some("ollama".into()),
+            ..Default::default()
+        };
+        let (t, _) = from_raw_with(raw3.clone(), &ollama, &env3).unwrap();
+        assert_eq!(
+            ai(&t),
+            (
+                "ollama".into(),
+                "qwen9".into(),
+                "".into(),
+                "http://192.168.1.5:11434".into()
+            )
+        );
+        let offline = Overrides {
+            offline: true,
+            ..Default::default()
+        };
+        let (t, _) = from_raw_with(raw3, &offline, &env3).unwrap();
+        assert_eq!(ai(&t).3, "http://192.168.1.5:11434");
+        // Ollama needs no key.
+        let (tree, _) = run(Overrides {
+            provider: Some("ollama".into()),
+            ..Default::default()
+        });
+        assert_eq!(tree["ai"]["api_key"], "");
+        assert!(settings(&tree, None).unwrap().require_provider().is_ok());
+    }
+
+    #[test]
     fn redaction() {
         assert_eq!(
             redact(&json!({"ai": {"api_key": "sk-1234567890abcdef"}}))["ai"]["api_key"],
@@ -1735,6 +1904,7 @@ mod tests {
                 ..Default::default()
             },
         );
+        assert_eq!(tree["ai"]["model"], "custom", "explicit model wins");
         apply_overrides(
             &mut tree,
             &Overrides {
@@ -1742,7 +1912,10 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(tree["ai"]["model"], "custom", "explicit model is kept");
+        assert_eq!(
+            tree["ai"]["model"], "grok-4.7",
+            "another provider's model never follows"
+        );
         apply_overrides(
             &mut tree,
             &Overrides {

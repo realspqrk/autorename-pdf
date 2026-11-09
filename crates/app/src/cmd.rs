@@ -49,19 +49,18 @@ impl Ctx<'_> {
     /// Load + override + validate. Warnings go to stderr (text mode).
     fn settings(&self, ov: Overrides, profile: Option<&str>) -> Result<(Settings, ConfigLocation)> {
         let loc = self.location();
-        let loaded = config::load(&loc.path)?;
-        let mut tree = loaded.tree.clone();
-        config::apply_overrides(&mut tree, &ov);
+        let loaded = config::load_with_overrides(&loc.path, &ov)?;
+        let tree = &loaded.tree;
         self.out.debug(&format!("config: {}", loc.path.display()));
         if self.out.is_text() {
-            let v = config::validate_base(&tree, profile);
+            let v = config::validate_base(tree, profile);
             for i in loaded.notices.iter().chain(&v.issues) {
                 if i.level == Level::Warning {
                     self.out.warn(&format!("{} ({})", i.message, i.field));
                 }
             }
         }
-        Ok((config::settings(&tree, profile)?, loc))
+        Ok((config::settings(tree, profile)?, loc))
     }
 
     fn overrides(&self) -> Overrides {
@@ -1287,10 +1286,8 @@ fn config_cmd(c: &ConfigCmd, ctx: &Ctx<'_>) -> Result<ExitCode> {
     let loc = ctx.location();
     match c {
         ConfigCmd::Show => {
-            let loaded = config::load(&loc.path)?;
-            let mut tree = loaded.tree;
-            config::apply_overrides(&mut tree, &ctx.overrides());
-            let redacted = config::redact(&tree);
+            let loaded = config::load_with_overrides(&loc.path, &ctx.overrides())?;
+            let redacted = config::redact(&loaded.tree);
             if out.is_text() {
                 out.line(&out.paint(&format!("# {}", loc.path.display()), Style::Dim));
                 let yaml = serde_saphyr::to_string(&redacted)
@@ -1306,9 +1303,7 @@ fn config_cmd(c: &ConfigCmd, ctx: &Ctx<'_>) -> Result<ExitCode> {
             Ok(ExitCode::Success)
         }
         ConfigCmd::Validate => {
-            let loaded = config::load(&loc.path)?;
-            let mut loaded = loaded;
-            config::apply_overrides(&mut loaded.tree, &ctx.overrides());
+            let loaded = config::load_with_overrides(&loc.path, &ctx.overrides())?;
             let v = config::validate_loaded(&loaded, None);
             if out.is_text() {
                 for i in &v.issues {
@@ -1518,21 +1513,11 @@ fn models(c: &ModelsCmd, ctx: &Ctx<'_>) -> Result<ExitCode> {
                     models_hint(ctx.out, true, pack),
                 ));
             }
-            let mut last = String::new();
             ocr::models::fetch(
                 &root,
                 pack,
                 &mut |p| {
-                    let line = format!(
-                        "Downloading {} {:.1}/{:.1} MB",
-                        p.file,
-                        p.downloaded as f64 / 1e6,
-                        p.total as f64 / 1e6
-                    );
-                    if line != last {
-                        out.progress(&line);
-                        last = line;
-                    }
+                    out.progress_bytes(&format!("Downloading {}", p.file), p.downloaded, p.total)
                 },
                 None,
             )?;
