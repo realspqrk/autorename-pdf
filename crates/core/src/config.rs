@@ -2016,7 +2016,8 @@ mod tests {
         );
         assert_eq!(
             name_list_path(Path::new("/x/c.yaml"), "company_name"),
-            PathBuf::from("/x/name-lists/company_name.yaml")
+            // absolute: Windows adds the current drive (`D:\x\…`)
+            std::path::absolute("/x/name-lists/company_name.yaml").unwrap()
         );
         let file = |f: &str| {
             name_list_in(Path::new("/d"), f)

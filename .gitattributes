@@ -1,3 +1,5 @@
 THIRD_PARTY_NOTICES.md text eol=lf
 assets/licenses/* text eol=lf
 about.hbs text eol=lf
+# Byte-exact expected text (pdfplumber goldens): no CRLF on Windows checkouts.
+crates/core/tests/golden/** text eol=lf

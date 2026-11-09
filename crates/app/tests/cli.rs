@@ -108,8 +108,11 @@ impl Env {
         ))
     }
 
+    /// `rel` uses `/`; joined per component so Windows gets `\` like the
+    /// paths the app prints.
     fn path(&self, rel: &str) -> PathBuf {
-        self.root.path().join(rel)
+        rel.split('/')
+            .fold(self.root.path().to_path_buf(), |p, c| p.join(c))
     }
 
     fn docs(&self) -> PathBuf {

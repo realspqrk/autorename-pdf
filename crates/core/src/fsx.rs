@@ -346,16 +346,37 @@ mod imp {
         MOVE_FILE_FLAGS, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
     };
 
-    fn wide(p: &Path) -> Vec<u16> {
-        p.as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect()
+    /// NUL-terminated UTF-16 path for Win32. Paths near `MAX_PATH` (260)
+    /// get the verbatim `\\?\` prefix, as std adds for its own calls; a deep
+    /// folder plus a long generated name would otherwise fail to rename.
+    fn wide(p: &Path) -> io::Result<Vec<u16>> {
+        const SLASH: u16 = b'\\' as u16;
+        let mut w: Vec<u16> = p.as_os_str().encode_wide().collect();
+        let prefixed = w.len() >= 4
+            && w[0] == SLASH
+            && w[1] == SLASH
+            && (w[2] == u16::from(b'?') || w[2] == u16::from(b'.'))
+            && w[3] == SLASH;
+        if w.len() >= 248 && !prefixed {
+            // `absolute` (GetFullPathNameW) normalizes `/` and `..`, which
+            // verbatim paths would take literally.
+            let a: Vec<u16> = std::path::absolute(p)?.as_os_str().encode_wide().collect();
+            w = if a.starts_with(&[SLASH, SLASH]) {
+                r"\\?\UNC\"
+                    .encode_utf16()
+                    .chain(a[2..].iter().copied())
+                    .collect()
+            } else {
+                r"\\?\".encode_utf16().chain(a).collect()
+            };
+        }
+        w.push(0);
+        Ok(w)
     }
 
     #[allow(unsafe_code)]
     fn move_file(src: &Path, dst: &Path, flags: MOVE_FILE_FLAGS) -> io::Result<()> {
-        let (s, d) = (wide(src), wide(dst));
+        let (s, d) = (wide(src)?, wide(dst)?);
         // SAFETY: both are NUL-terminated UTF-16 buffers alive for the call.
         if unsafe { MoveFileExW(s.as_ptr(), d.as_ptr(), flags) } == 0 {
             return Err(io::Error::last_os_error());
@@ -748,6 +769,7 @@ mod tests {
         let f = File::open(&p).unwrap();
         let id = file_id(&f).unwrap();
         assert_eq!(path_id(&p).unwrap(), id);
+        drop(f); // Windows refuses to replace a file that is still open
         write_atomic(&p, b"1").unwrap();
         assert_ne!(path_id(&p).unwrap(), id);
     }
