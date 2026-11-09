@@ -130,6 +130,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - Adding a Lucide icon: add the const to `theme::icon`, then rebuild the subset from all `theme::icon` codepoints with `uvx --from fonttools pyftsubset lucide.ttf --unicodes=... --no-hinting` (byte-identical to the shipped subset) and update the sha in `crates/app/assets/README.md`.
 
 ## OS integration & packaging
+- cargo-packager 0.11.8 macOS: signing needs `[macos] signing-identity` in config (env `APPLE_SIGNING_IDENTITY` is ignored); the `.dmg` is signed but never notarized/stapled, so notarize + staple it explicitly (`playbooks/macos-release.md` step 3). Verified in packager source 2026-11-09, not yet on a Mac.
 - Explorer launches a verb once per selected file, even with `MultiSelectModel=Player` (that only lifts the 15-item limit). `autorename-pdf-gui.exe` coalesces launches via a spool + lock in `%TEMP%\autorename-pdf-launch` (`crates/winlaunch/src/coalesce.rs`). Do not remove it, or 20 files open 20 windows.
 - HKCU verbs need an Explorer restart; on Win11 they are under "Show more options".
 - cargo-packager 0.11.8 has no NSIS post-install/pre-uninstall hook config: `packaging/nsis/installer.nsi` is the upstream template plus two `nsExec` lines. Re-sync on every packager bump.
