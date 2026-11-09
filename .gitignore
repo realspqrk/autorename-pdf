@@ -3,9 +3,10 @@
 config.yaml
 name-lists/*.yaml
 
-# PDFs, except the test fixtures the Rust tests read
+# PDFs, except the test fixtures and the demo set (README, AGENTS.md step 4)
 *.pdf
 !tests/fixtures/*.pdf
+!examples/demo/*.pdf
 
 # Rust
 /target/
