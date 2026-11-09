@@ -1,0 +1,6 @@
+# egui_kittest snapshot comparison. Reference PNGs are rendered on Linux (Vulkan)
+# with zero pixels above the 0.6 threshold allowed there. Metal on macOS
+# anti-aliases a few text edges differently (measured 2026-11-09: at most 25
+# pixels above the threshold per image).
+[mac]
+max_failed_pixels = 25

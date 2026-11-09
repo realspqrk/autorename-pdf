@@ -23,7 +23,7 @@ Follow `playbooks/release.md`; this is the short path.
    - Linux: `cargo xtask dist` → `.AppImage`, `.deb`, pacman `.tar.gz` + `PKGBUILD`
    - Windows host: `cargo xtask dist --sign` (Azure Trusted Signing; needs signtool, the dlib, `metadata.json`, Azure login) or without `--sign`
    - Windows from Linux (unsigned test build): `cargo xtask dist --target x86_64-pc-windows-msvc` (needs `cargo-xwin`, `makensis`); `--no-package` for bare exes
-   - macOS: `cargo xtask dist` (unsigned; Intel Macs have OCR off)
+   - macOS (Apple silicon only): `cargo xtask dist` (unsigned; signing: `playbooks/macos-release.md`)
 3. Verify in `target/dist/<triple>/`: `sha256sum -c SHA256SUMS`, list files and sizes, smoke `--version` and `inspect tests/fixtures/text_invoice_acme.pdf`.
 4. Windows installers: validate per `playbooks/windows-vm-validation.md` before publishing.
 

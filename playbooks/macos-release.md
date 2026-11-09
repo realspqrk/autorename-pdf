@@ -1,6 +1,6 @@
 # macOS release (build, sign, notarize)
 
-Runs on a Mac (build + DMG + tests are Mac-bound; `rcodesign` could sign/notarize from Linux but is not wired up). Not validated end to end yet: the first run must confirm every step and update this file (and `known.md` for traps).
+Runs on a Mac (build + DMG + tests are Mac-bound; `rcodesign` could sign/notarize from Linux but is not wired up). Steps 1–2 validated on the Mac mini 2026-11-09 (unsigned; `cargo test --workspace` green). Steps 3–5 not yet run: the first run must confirm them and update this file (and `known.md` for traps).
 
 ## TOC
 - [1. Prerequisites](#1-prerequisites)
@@ -10,18 +10,18 @@ Runs on a Mac (build + DMG + tests are Mac-bound; `rcodesign` could sign/notariz
 - [5. Publish](#5-publish)
 
 ## 1. Prerequisites
+- From Omarchy: the LAN Mac mini is driven by the global `mac-remote` skill (`~/.claude/skills/mac-remote/`): `mac.sh sync ~/Work/autorename-pdf`, then every step below as `mac.sh run 'cd ~/Code/autorename-pdf && …'` (GUI-session runner, keychain unlocked). Toolchain below is already installed there (2026-11-09).
 - Apple Developer Program membership; a **Developer ID Application** certificate in the login keychain (`security find-identity -v -p codesigning` lists it).
 - Xcode Command Line Tools (`xcode-select --install`): `codesign`, `xcrun notarytool`, `xcrun stapler`.
-- Rust via rustup (`rustup target add aarch64-apple-darwin x86_64-apple-darwin`), repo checkout at the release tag.
-- Notarization credentials, one of: App Store Connect API key (`APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_PATH`) or Apple ID (`APPLE_ID`, `APPLE_PASSWORD` = app-specific password, `APPLE_TEAM_ID`). Never commit them.
+- Rust via rustup (`aarch64-apple-darwin`; Apple silicon only, no Intel build), repo checkout at the release tag.
+- Notarization credentials (cargo-packager reads env), one of: `APPLE_KEYCHAIN_PROFILE=<profile>` (a `xcrun notarytool store-credentials` profile; checked first), App Store Connect API key (`APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_PATH`) or Apple ID (`APPLE_ID`, `APPLE_PASSWORD` = app-specific password, `APPLE_TEAM_ID`). Never commit them.
 
 ## 2. Build
 ```bash
 cargo xtask fetch-natives
-cargo xtask dist                                   # Apple silicon: .app + .dmg in target/dist/aarch64-apple-darwin/
-cargo xtask dist --target x86_64-apple-darwin      # Intel: OCR off (no ORT build for this target)
+cargo xtask dist        # .app + .dmg in target/dist/aarch64-apple-darwin/
 ```
-Smoke test before signing: `target/dist/<triple>/stage/bin/autorename-pdf --version` and `inspect examples/demo/acme-invoice.pdf` (proves PDFium loads).
+Smoke test before signing: `APP=target/dist/aarch64-apple-darwin/AutoRename-PDF.app; B="$APP/Contents/MacOS/autorename-pdf"; export AUTORENAME_PDF_DATA_DIR=/tmp/arp-smoke`, then `$B --version`; `$B inspect examples/demo/acme-invoice.pdf -o json` (PDFium loads from `Contents/Resources`); `$B models fetch latin`, then `inspect examples/demo/springfield-scan.pdf` → `ocr_quality` 1.0 (ORT works). GUI: `open -n --env AUTORENAME_GUI_DEMO=1 --env AUTORENAME_PDF_DATA_DIR=/tmp/arp-smoke/gui "$APP"` from the runner, then `screencapture -x -o -l <CGWindowNumber> out.png` (window capture works from the runner; full-screen VNC does not).
 
 ## 3. Sign and notarize
 cargo-packager 0.11.8 signs only when `[macos] signing-identity` is set in the effective config; it ignores `APPLE_SIGNING_IDENTITY` and `xtask` does not forward it. It then signs + notarizes + staples the `.app`, but the `.dmg` is **only signed** (no notarize, no staple). Set the identity in a local, uncommitted `Packager.toml` copy, then:

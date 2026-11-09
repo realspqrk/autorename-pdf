@@ -30,7 +30,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - Release cross-link (`cargo xwin build --release`) fails with `lld-link: could not open 'PathCch.lib'`: ORT's static lib requests the mixed-case name, the xwin splat has only `pathcch.lib`/`PATHCCH.lib`. `xtask dist` symlinks `PathCch.lib` in `~/.cache/cargo-xwin/xwin/sdk/lib/um/<arch>/`. `check`/`clippy` never link, so they don't show it.
 - xwin clippy with `-D warnings` fails on the `unsafe extern` block in `gui/motion.rs` (workspace `unsafe_code = warn`); M7 checks used `-A unsafe-code`.
 - `embed-resource` cross-compiles `.rc` with `llvm-rc` (`/usr/bin/llvm-rc`); without it the Windows build script panics.
-- ort rc.13: no x86_64-apple-darwin binaries (MS ORT 1.28 has no osx-x64 either) → Intel Mac builds without the `ocr` feature. The Windows x64 ORT dist is the `directml` set: the exe imports `DirectML.dll` (18 MB), which `xtask dist` stages beside it; without it the exe does not start at all, not even `--version`.
+- The Windows x64 ORT dist is the `directml` set: the exe imports `DirectML.dll` (18 MB), which `xtask dist` stages beside it; without it the exe does not start at all, not even `--version`.
 - resvg 0.49 with `default-features = false` cannot render text; the icon SVG masters must stay text-free.
 
 ## Windows VM
@@ -119,7 +119,7 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - `check_for_id_clash` paints "🔥 …" in Monospace; our fonts have no emoji, so kittest panics "No glyph for 🔥". That means an id clash → salt the id (`Button::salt`).
 - `Response::labelled_by(id)` must point at a node in the AccessKit tree; a painted label has none → accesskit_consumer panic. Give the input its own `WidgetInfo` label.
 - `plan_files` has no cancel hook: the GUI analyzes in chunks of `jobs` files so Stop keeps finished rows; cross-chunk collisions are re-suffixed with `naming::plan_target`. `apply_plan` is not cancellable.
-- kittest: GUI tests are unit tests in the bin (`cargo test -p autorename-app --bin autorename-pdf gui::`), snapshots in `crates/app/tests/snapshots/gui/` (`UPDATE_SNAPSHOTS=force`). wgpu needs a GPU adapter (host Vulkan; Haswell prints a harmless MESA warning); CI skips `gui::tests`.
+- kittest: GUI tests are unit tests in the bin (`cargo test -p autorename-app --bin autorename-pdf gui::`), snapshots in `crates/app/tests/snapshots/gui/` (`UPDATE_SNAPSHOTS=force`). wgpu needs a GPU adapter (host Vulkan; Haswell prints a harmless MESA warning); CI skips `gui::tests`. References are Linux renders; Metal anti-aliases text edges slightly differently, so root `kittest.toml` allows up to 25 pixels above the 0.6 threshold on `[mac]` only (Linux: zero).
 - A `ScrollArea` nested in a scrolled page takes `scroll_to_me`/focus scroll requests for itself; the page never scrolls to the widget. Multi-line `Field` therefore grows with its text instead of scrolling.
 - Config edits of free-text keys use `config_edit::quoted` (always a one-line string; the bare-scalar heuristic is gone): a bare `1234`/`true` is a YAML number/bool (schema error), and a raw newline would split the line. Bare values only for numbers, bools, `auto` and `null`.
 - Resolved profiles (`resolve_profiles`) are already interpolated: `{language}` / `{company}` are gone from field descriptions. To see whether a profile uses a setting, resolve with a marker value (`settings::Uses::of`).
@@ -130,7 +130,8 @@ Non-obvious things that already cost time. Add an entry when you hit a new one; 
 - Adding a Lucide icon: add the const to `theme::icon`, then rebuild the subset from all `theme::icon` codepoints with `uvx --from fonttools pyftsubset lucide.ttf --unicodes=... --no-hinting` (byte-identical to the shipped subset) and update the sha in `crates/app/assets/README.md`.
 
 ## OS integration & packaging
-- cargo-packager 0.11.8 macOS: signing needs `[macos] signing-identity` in config (env `APPLE_SIGNING_IDENTITY` is ignored); the `.dmg` is signed but never notarized/stapled, so notarize + staple it explicitly (`playbooks/macos-release.md` step 3). Verified in packager source 2026-11-09, not yet on a Mac.
+- macOS (APFS) rejects non-UTF-8 file names (`EILSEQ`): non-UTF-8 path tests are `cfg(all(unix, not(target_os = "macos")))`. macOS and Windows ignore `XDG_DATA_HOME`; CLI test harnesses isolate state with `AUTORENAME_PDF_DATA_DIR` (Windows also ignores `HOME`, so without it tests write to the real AppData).
+- cargo-packager 0.11.8 macOS: signing needs `[macos] signing-identity` in config (env `APPLE_SIGNING_IDENTITY` is ignored); the `.dmg` is signed but never notarized/stapled, so notarize + staple it explicitly (`playbooks/macos-release.md` step 3). Verified in packager source 2026-11-09; unsigned `app,dmg` build verified on the Mac mini 2026-11-09 (signing not yet run).
 - Explorer launches a verb once per selected file, even with `MultiSelectModel=Player` (that only lifts the 15-item limit). `autorename-pdf-gui.exe` coalesces launches via a spool + lock in `%TEMP%\autorename-pdf-launch` (`crates/winlaunch/src/coalesce.rs`). Do not remove it, or 20 files open 20 windows.
 - HKCU verbs need an Explorer restart; on Win11 they are under "Show more options".
 - cargo-packager 0.11.8 has no NSIS post-install/pre-uninstall hook config: `packaging/nsis/installer.nsi` is the upstream template plus two `nsExec` lines. Re-sync on every packager bump.

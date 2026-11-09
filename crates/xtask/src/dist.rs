@@ -13,6 +13,12 @@
 //! `--sign` (Windows host): signs `autorename-pdf.exe` before packaging and
 //! lets cargo-packager sign the launcher, uninstaller and installer through
 //! `cargo xtask sign %1`.
+//!
+//! `--sign` (macOS): needs `APPLE_SIGNING_IDENTITY` (Developer ID
+//! Application) and `APPLE_KEYCHAIN_PROFILE` (a `notarytool store-credentials`
+//! profile). cargo-packager signs (hardened runtime), notarizes and staples
+//! the `.app`; it only signs the `.dmg`, so xtask notarizes and staples that
+//! before writing `SHA256SUMS`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -139,10 +145,6 @@ fn build(o: &Opts, root: &Path) -> Result<PathBuf, String> {
     cmd.args(["-p", "autorename-app"]);
     if o.windows() {
         cmd.args(["-p", "autorename-winlaunch"]);
-    }
-    if o.target == "x86_64-apple-darwin" {
-        // No prebuilt ONNX Runtime for Intel Macs (known.md).
-        cmd.args(["--no-default-features", "--features", "gui"]);
     }
     exec(&mut cmd)?;
     let target_dir = std::env::var_os("CARGO_TARGET_DIR")
@@ -303,10 +305,20 @@ fn packager_config(o: &Opts, root: &Path, stage: &Path, out: &Path) -> Result<Va
         "resources".into(),
         json!([{"src": stage.join("res"), "target": "."}]),
     );
-    if o.sign {
+    if o.sign && o.windows() {
         m.insert(
             "windows".into(),
             json!({"signCommand": "cargo xtask sign %1"}),
+        );
+    }
+    if o.sign && o.macos() {
+        // cargo-packager ignores APPLE_SIGNING_IDENTITY; it signs only with
+        // this config key (known.md).
+        let mac = m.entry("macos").or_insert_with(|| json!({}));
+        let mac = mac.as_object_mut().ok_or("[macos] is not a table")?;
+        mac.insert(
+            "signing-identity".into(),
+            json!(env_required(APPLE_IDENTITY)?),
         );
     }
     Ok(cfg)
@@ -338,7 +350,42 @@ fn checksums(out: &Path) -> Result<(), String> {
     fs::write(out.join("SHA256SUMS"), lines.join("\n") + "\n").map_err(|e| e.to_string())
 }
 
+const APPLE_IDENTITY: &str = "APPLE_SIGNING_IDENTITY";
+const APPLE_PROFILE: &str = "APPLE_KEYCHAIN_PROFILE";
+
+fn env_required(name: &str) -> Result<String, String> {
+    std::env::var(name)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| format!("--sign on macOS needs {name} (playbooks/macos-release.md)"))
+}
+
+/// Notarize + staple every `.dmg` in `out` (cargo-packager only signs it).
+fn notarize_dmgs(out: &Path) -> Result<(), String> {
+    let profile = env_required(APPLE_PROFILE)?;
+    let dmgs = fs::read_dir(out)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "dmg"));
+    for dmg in dmgs {
+        exec(
+            Command::new("xcrun")
+                .args(["notarytool", "submit"])
+                .arg(&dmg)
+                .args(["--keychain-profile", &profile, "--wait"]),
+        )?;
+        exec(Command::new("xcrun").args(["stapler", "staple"]).arg(&dmg))?;
+    }
+    Ok(())
+}
+
 pub fn run(o: &Opts) -> Result<(), String> {
+    if o.sign && o.macos() {
+        // Fail before the long build, not after it.
+        env_required(APPLE_IDENTITY)?;
+        env_required(APPLE_PROFILE)?;
+    }
     let root = natives::workspace_root();
     let n = natives::find(&o.target).ok_or_else(|| format!("no pinned PDFium for {}", o.target))?;
     natives::fetch(n)?;
@@ -348,7 +395,7 @@ pub fn run(o: &Opts) -> Result<(), String> {
     if !o.package {
         return Ok(());
     }
-    if o.sign {
+    if o.sign && o.windows() {
         crate::sign::sign_files(&[stage.join("bin/autorename-pdf.exe")])?;
     }
     ensure_packager()?;
@@ -374,6 +421,9 @@ pub fn run(o: &Opts) -> Result<(), String> {
             .args(["packager", "--formats", formats, "--config", &cfg_text]),
     )?;
     rename_installer(&out)?;
+    if o.sign && o.macos() {
+        notarize_dmgs(&out)?;
+    }
     checksums(&out)
 }
 

@@ -1189,7 +1189,8 @@ mod tests {
         assert_eq!(std::fs::read(&a).unwrap(), b"orig");
     }
 
-    #[cfg(unix)]
+    // APFS rejects non-UTF-8 file names (EILSEQ).
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn non_utf8_paths_are_restored_exactly() {
         use std::os::unix::ffi::OsStrExt;

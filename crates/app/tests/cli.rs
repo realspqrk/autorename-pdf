@@ -112,6 +112,7 @@ impl Env {
         let mut c = Command::cargo_bin("autorename-pdf").unwrap();
         c.env_remove("AUTORENAME_PDF_CONFIG")
             .env("XDG_DATA_HOME", self.path("data"))
+            .env("AUTORENAME_PDF_DATA_DIR", self.path("data/autorename-pdf"))
             .env("XDG_CONFIG_HOME", self.path("xdgcfg"))
             .env("HOME", self.root.path())
             .env("AUTORENAME_MODELS_DIR", self.path("models"))
@@ -811,7 +812,7 @@ fn rerunning_on_renamed_duplicates_changes_nothing() {
 fn unwritable_journal_stops_before_any_change() {
     let env = Env::ollama(&acme_mock());
     let (plan_file, _, src) = make_plan(&env);
-    // The journal directory cannot be created: XDG_DATA_HOME is a file.
+    // The journal directory cannot be created: its parent is a file.
     let data = env.path("data");
     std::fs::remove_dir_all(&data).unwrap();
     std::fs::write(&data, b"not a dir").unwrap();
@@ -892,7 +893,8 @@ fn aliased_directories_share_reservations() {
     assert_ne!(names[0], names[1], "same physical folder: distinct targets");
 }
 
-#[cfg(unix)]
+// APFS rejects non-UTF-8 file names (EILSEQ).
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn non_utf8_paths_survive_machine_output() {
     use std::os::unix::ffi::OsStrExt;
@@ -1024,7 +1026,8 @@ fn missing_model_hint_is_scoped_and_privacy_aware() {
     assert!(!w.contains("models fetch latin"), "{w}");
 }
 
-#[cfg(unix)]
+// APFS rejects non-UTF-8 file names (EILSEQ).
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn non_utf8_config_dir_gives_structured_documents() {
     use std::os::unix::ffi::OsStrExt;
@@ -1039,6 +1042,7 @@ fn non_utf8_config_dir_gives_structured_documents() {
             .unwrap()
             .env_remove("AUTORENAME_PDF_CONFIG")
             .env("XDG_DATA_HOME", env.path("data"))
+            .env("AUTORENAME_PDF_DATA_DIR", env.path("data/autorename-pdf"))
             .env("XDG_CONFIG_HOME", env.path("xdgcfg"))
             .env("HOME", env.path(""))
             .arg("--config")

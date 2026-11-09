@@ -16,7 +16,7 @@ Background for the [README](../README.md). Command options and side effects are 
 |---|---|
 | Windows | Per-user install to `%LOCALAPPDATA%\Programs\AutoRename-PDF`, no admin prompt. Adds the Start menu entry, the Explorer context menu and `autorename-pdf` on your user `PATH` (new terminals; otherwise `"%LOCALAPPDATA%\Programs\AutoRename-PDF\autorename-pdf.exe"`). Uninstall (Settings > Apps) removes only those; your settings, name lists and undo history stay in `%APPDATA%\autorename-pdf` and `%LOCALAPPDATA%\autorename-pdf`. |
 | Linux | `integrate install` adds the menu entry, "Rename now" and "Preview in AutoRename-PDF" for Nautilus (Scripts submenu), Dolphin, Nemo and Thunar, and an `autorename-pdf` link in `~/.local/bin`. `integrate remove` deletes exactly those entries. |
-| macOS | Build from source ([README › Development](../README.md#development)); `integrate install` adds Finder Quick Actions. |
+| macOS (Apple silicon) | Build from source ([README › Development](../README.md#development)); `integrate install` adds Finder Quick Actions. |
 
 ### AppImage without FUSE
 

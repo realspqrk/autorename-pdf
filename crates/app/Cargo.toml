@@ -28,8 +28,7 @@ sha2 = "0.11.1"
 
 [features]
 default = ["ocr", "gui"]
-# Offline OCR engine (oar-ocr + static ONNX Runtime, ~28 MB). Off for targets
-# without prebuilt ORT (x86_64-apple-darwin).
+# Offline OCR engine (oar-ocr + static ONNX Runtime, ~28 MB).
 ocr = ["autorename-core/ocr"]
 # egui/eframe desktop GUI (`autorename-pdf gui`, no-args + display).
 gui = [

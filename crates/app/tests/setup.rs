@@ -36,6 +36,7 @@ impl Home {
             .env_remove("OPENAI_API_KEY")
             .env_remove("JEV_API_KEY")
             .env("XDG_DATA_HOME", self.path("data"))
+            .env("AUTORENAME_PDF_DATA_DIR", self.path("data/autorename-pdf"))
             .env("XDG_CONFIG_HOME", self.path("xdgcfg"))
             .env("HOME", self.root.path())
             .env("AUTORENAME_MODELS_DIR", self.path("models"))

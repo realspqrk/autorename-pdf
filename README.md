@@ -27,7 +27,7 @@ Download from [Releases](https://github.com/realspqrk/autorename-pdf/releases). 
 | Linux (any distro) | `autorename-pdf_<ver>_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
 | Debian / Ubuntu | `autorename-pdf_<ver>_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
 | Arch | `autorename-pdf_<ver>_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
-| macOS | build from source | See [Development](#development). |
+| macOS (Apple silicon) | build from source | See [Development](#development). |
 
 On Linux, run `integrate install` once for the menu entry and the right-click entries: `./autorename-pdf_*.AppImage integrate install` (AppImage) or `autorename-pdf integrate install`. Install details (uninstall, AppImage without FUSE): [docs/guide.md](docs/guide.md#install-details).
 
@@ -153,7 +153,7 @@ cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 cargo build --release -p autorename-app      # macOS: target/release/autorename-pdf
 ```
 
-Intel Macs: add `--no-default-features --features gui` (no OCR). Release and packaging: [playbooks/release.md](playbooks/release.md). Issues and forks are welcome; pull requests are not being accepted right now.
+macOS: Apple silicon only. Release and packaging: [playbooks/release.md](playbooks/release.md). Issues and forks are welcome; pull requests are not being accepted right now.
 
 ## Support
 

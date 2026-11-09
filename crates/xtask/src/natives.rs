@@ -54,12 +54,6 @@ pub const PDFIUM: &[Native] = &[
         sha256: "4939bd935ac83ddc09a3a4f038bc43a19cea1660316a3667f26cb07a070e139d",
         lib: "lib/libpdfium.dylib",
     },
-    Native {
-        triple: "x86_64-apple-darwin",
-        asset: "pdfium-mac-x64.tgz",
-        sha256: "8a5193535b80c7215d8932f6647ae5097465b6dba2811602c21e120c2af112b0",
-        lib: "lib/libpdfium.dylib",
-    },
 ];
 
 pub fn host_triple() -> Option<&'static str> {
@@ -69,7 +63,6 @@ pub fn host_triple() -> Option<&'static str> {
         ("windows", "x86_64") => "x86_64-pc-windows-msvc",
         ("windows", "aarch64") => "aarch64-pc-windows-msvc",
         ("macos", "aarch64") => "aarch64-apple-darwin",
-        ("macos", "x86_64") => "x86_64-apple-darwin",
         _ => return None,
     })
 }

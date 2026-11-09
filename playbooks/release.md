@@ -34,7 +34,6 @@ it fetches PDFium, builds release with `--locked`, stages binaries, natives and 
 | Windows x64 (Windows host) | `cargo xtask dist --sign` | `AutoRename-PDF_X.Y.Z_x64-setup.exe` (NSIS, per user) |
 | Windows from Linux (unsigned test build) | `cargo xtask dist --target x86_64-pc-windows-msvc` | needs `makensis` (`nsis` package) and `cargo-xwin` |
 | macOS arm64 | `cargo xtask dist` | `.app`, `.dmg`; signing + notarization: [macos-release.md](macos-release.md) |
-| macOS Intel | `cargo xtask dist --target x86_64-apple-darwin` | OCR is off (there is no ORT build for this target) |
 
 - AppImage: cargo-packager downloads linuxdeploy from GitHub, and the build sets `APPIMAGE_EXTRACT_AND_RUN=1` (works without FUSE).
 - Pacman: the output is a source tarball plus a PKGBUILD. Install it with `makepkg -si` in a directory that holds both files.

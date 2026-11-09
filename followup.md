@@ -33,7 +33,6 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 - Only the `latin` PP-OCRv6 pack (48 languages) is in `crates/core/src/ocr/manifest.rs`. Add CJK, Cyrillic, Arabic, Devanagari etc. (PP-OCRv5 script recognizers; URLs + sha256 from oar-ocr `docs/models.md`) when a user needs them. Steps: `playbooks/natives-and-models.md`.
 - `ocr.language: auto` uses the installed pack (today only `latin`, which reads English, German and 46 more at once). With ≥ 2 script packs installed, `auto` needs script detection to choose a pack per page (or run several and keep the better result); `ocr::pack_for_setting` is the hook.
-- Intel macOS: no prebuilt ORT for x86_64-apple-darwin; OCR stays off there unless ORT is built from source.
 
 ## Decision models
 
@@ -47,7 +46,7 @@ Evaluated 2026-11-07. The default `ai` decider uses the main provider. `harmoniz
 - AppImage without FUSE: menu entries rely on the documented extract-to-`~/.local/opt/autorename-pdf` + `integrate install` route; an Exec that works mounted and extracted is not implemented.
 
 - **Linux-side NSIS build**: Arch has no `makensis`, so Windows installers are built on Windows (CI `release.yml`). A Linux build needs NSIS from source or a container.
-- **macOS signing + notarization**: steps written in `playbooks/macos-release.md`, never run; Finder Quick Actions untested. Needs a Mac with an Apple Developer ID (optionally a macOS CI runner).
+- **macOS signing + notarization**: unsigned Apple silicon `.app`/`.dmg` build, smoke test, full `cargo test` and GUI launch verified on the Mac mini 2026-11-09; signing/notarization (`playbooks/macos-release.md` step 3) never run; Finder Quick Actions untested. Mac is ready via the `mac-remote` skill; open: a local `Packager.toml` `signing-identity` plus `APPLE_KEYCHAIN_PROFILE=<notarytool profile>` (cargo-packager checks it first; `APPLE_API_*` / `APPLE_ID` env also work).
 - **Windows 11 modern context menu**: today the verbs are classic HKCU entries under "Show more options". The top-level menu needs a signed sparse package plus an `IExplorerCommand` COM handler.
 - **CI GUI tests**: hosted runners have no GPU, so CI skips `gui::tests`. Try mesa lavapipe (`mesa-vulkan-drivers`) and check that the snapshots stay within tolerance.
 

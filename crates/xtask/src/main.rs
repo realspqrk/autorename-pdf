@@ -2,7 +2,7 @@
 //!
 //! - `fetch-natives [--target <triple> | --all]`: pinned PDFium into `vendor/`.
 //! - `icons [--check]`: render `assets/icons/generated/` from the SVG masters.
-//! - `dist [--target <triple>] [--formats a,b] [--no-package]`: release build,
+//! - `dist [--target <triple>] [--formats a,b] [--no-package] [--sign]`: release build,
 //!   natives, staging and cargo-packager (`playbooks/release.md`).
 //! - `notices [--check]`: `THIRD_PARTY_NOTICES.md` from cargo-about + `assets/licenses/`.
 //! - `sign <files…>`: Azure Trusted Signing via signtool (Windows only).
@@ -20,7 +20,7 @@ fn usage() -> ExitCode {
     eprintln!("usage: cargo xtask <task>");
     eprintln!("  fetch-natives [--target <triple> | --all]");
     eprintln!("  icons [--check]");
-    eprintln!("  dist [--target <triple>] [--formats <list>] [--no-package]");
+    eprintln!("  dist [--target <triple>] [--formats <list>] [--no-package] [--sign]");
     eprintln!("  notices [--check]");
     eprintln!("  sign <file>...");
     eprintln!("  check-tag <tag>   (release tag must be v<workspace version>)");

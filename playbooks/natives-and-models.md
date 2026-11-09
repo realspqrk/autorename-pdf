@@ -17,7 +17,7 @@ cargo xtask fetch-natives --all                            # every pinned target
 ```
 - This downloads the bblanchon/pdfium-binaries tag `PDFIUM_TAG` (in `crates/xtask/src/natives.rs`) and verifies its sha256. It writes `vendor/pdfium/<triple>/{libpdfium.so|pdfium.dll|libpdfium.dylib, LICENSE, VERSION, .sha256}`.
 - `vendor/` is gitignored. Re-running is a no-op when the `.sha256` stamp matches.
-- Pinned triples: x86_64/aarch64 linux-gnu, x86_64/aarch64 windows-msvc, aarch64/x86_64 apple-darwin.
+- Pinned triples: x86_64/aarch64 linux-gnu, x86_64/aarch64 windows-msvc, aarch64-apple-darwin (Apple silicon only; no Intel Macs).
 
 ## Fetch OCR models
 - The product command is `autorename-pdf models fetch [pack]`. In core it is `ocr::models::fetch(root, pack, progress)`. Other operations: `list`, `verify`, `import(root, pack, dir)` for offline installs, and `remove`.
@@ -33,7 +33,7 @@ cargo xtask fetch-natives --all                            # every pinned target
 | Pack files | `<models root>/<pack>/<file name from manifest>` |
 | ORT | statically linked by ort-sys `download-binaries` at build time; cache `~/.cache/dfbin/<triple>/<sha>/` |
 
-Release packaging puts the PDFium lib next to the executable on Windows, in `/usr/lib/autorename-pdf/` for deb/pacman/AppImage, and in `Contents/Resources/` of the macOS bundle (`main.rs::locate_packaged_pdfium` sets `AUTORENAME_PDFIUM_DIR` for the last two). No x86_64-apple-darwin ORT exists, so build Intel Macs with `--no-default-features --features gui` (GUI kept, OCR off).
+Release packaging puts the PDFium lib next to the executable on Windows, in `/usr/lib/autorename-pdf/` for deb/pacman/AppImage, and in `Contents/Resources/` of the macOS bundle (`main.rs::locate_packaged_pdfium` sets `AUTORENAME_PDFIUM_DIR` for the last two).
 
 ## Run the tests
 ```bash

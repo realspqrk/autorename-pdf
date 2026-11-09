@@ -47,6 +47,10 @@ fn run(config: &Path, args: &[&str]) -> (i32, Value) {
         .unwrap()
         .env_remove("AUTORENAME_PDF_CONFIG")
         .env("XDG_DATA_HOME", dir.path().join("data"))
+        .env(
+            "AUTORENAME_PDF_DATA_DIR",
+            dir.path().join("data/autorename-pdf"),
+        )
         .env("XDG_CONFIG_HOME", dir.path().join("xdgcfg"))
         .env("HOME", dir.path())
         .env("OPENAI_API_KEY", "sk-test-1234567890abcdef")
