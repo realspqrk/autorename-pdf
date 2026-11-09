@@ -43,9 +43,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Oldest supported glibc: packages built here run on Ubuntu
-          # 22.04+ and current Arch; a newer builder would raise the floor.
-          - os: ubuntu-22.04
+          # Oldest supported glibc: the prebuilt ONNX Runtime needs glibc 2.38
+          # and GCC 13 libstdc++, so 24.04 is the floor (Debian 13+, Arch).
+          # A newer builder would raise it further.
+          - os: ubuntu-24.04
             triple: x86_64-unknown-linux-gnu
           - os: windows-latest
             triple: x86_64-pc-windows-msvc
@@ -119,7 +120,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: ubuntu-22.04 deb+AppImage, os: ubuntu-22.04, container: "" }
           - { name: ubuntu-24.04 deb+AppImage, os: ubuntu-24.04, container: "" }
           - { name: arch pacman, os: ubuntu-latest, container: "archlinux:latest" }
     runs-on: ${{ matrix.os }}

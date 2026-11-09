@@ -31,7 +31,7 @@ it fetches PDFium, builds release with `--locked` and `--remap-path-prefix <home
 
 | OS (build host) | Command | Output in `target/dist/<triple>/` |
 |---|---|---|
-| Linux x86_64 (release: CI on ubuntu-22.04 = glibc floor for Ubuntu 22.04+/Arch) | `cargo xtask dist` | `.AppImage`, `.deb`, pacman `.tar.gz` + `PKGBUILD` |
+| Linux x86_64 (release: CI on ubuntu-24.04 = glibc 2.38 floor, set by the prebuilt ONNX Runtime) | `cargo xtask dist` | `.AppImage`, `.deb`, pacman `.tar.gz` + `PKGBUILD` |
 | Windows x64 (Windows host) | `cargo xtask dist --sign` | `AutoRename-PDF_X.Y.Z_x64-setup.exe` (NSIS, per user) |
 | Windows from Linux (unsigned test build) | `cargo xtask dist --target x86_64-pc-windows-msvc` | needs `makensis` (`nsis` package) and `cargo-xwin` |
 | macOS arm64 (Mac mini) | `cargo xtask dist --sign` | `.app`, notarized + stapled `.dmg`: [macos-release.md](macos-release.md) |
@@ -69,7 +69,7 @@ Then:
 Flow used for 4.0.0-beta.1 (CI builds Linux; signed Windows comes from the VM, macOS from the Mac mini):
 1. PR to `main` → `ci.yml` green (fmt, clippy + tests on Linux and Windows, licenses). A run with zero jobs and "workflow file issue" can be a GitHub internal error (see the run page annotation): `gh run rerun <id>`.
 2. Signed builds in parallel: Windows VM (step 4, then [windows-vm-validation.md](windows-vm-validation.md) steps 2-7) and Mac ([macos-release.md](macos-release.md) steps 3-4). Copy the Windows setup exe + `SHA256SUMS` to the host via `\\host.lan\Data`; `mac.sh pull` the DMG + `SHA256SUMS`. `sha256sum -c` each.
-3. Merge the PR (fast-forward), tag `vX.Y.Z[-beta.N]` on the merge commit, push the tag. `release.yml`: version check, license gates, Linux (ubuntu-22.04) + unsigned Windows packages, `smoke-linux` (Ubuntu 22.04/24.04 deb + AppImage, Arch pacman: CLI + PDFium + OCR), then a draft release (pre-release for `-` tags) with `--generate-notes`.
+3. Merge the PR (fast-forward), tag `vX.Y.Z[-beta.N]` on the merge commit, push the tag. `release.yml`: version check, license gates, Linux (ubuntu-24.04) + unsigned Windows packages, `smoke-linux` (Ubuntu 24.04 deb + AppImage, Arch pacman: CLI + PDFium + OCR), then a draft release (pre-release for `-` tags) with `--generate-notes`.
 4. Replace the unsigned Windows assets and add macOS: rename each manifest to `SHA256SUMS-<triple>`, then `gh release upload vX.Y.Z <setup.exe> SHA256SUMS-x86_64-pc-windows-msvc <dmg> SHA256SUMS-aarch64-apple-darwin --clobber`.
 5. Check the draft: asset names (GitHub may rewrite special characters; the README install table names exact files), one `SHA256SUMS-*` per platform, download one asset and `sha256sum -c`. Set the notes (`gh release edit --notes-file`), then publish: `gh release edit vX.Y.Z --draft=false` (pre-releases keep `--prerelease`).
 

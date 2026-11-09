@@ -42,7 +42,8 @@ template = "packaging/nsis/installer.nsi"
 [deb]
 desktop-template = "packaging/linux/autorename-pdf.desktop.hbs"
 section = "utils"
-depends = ["libc6", "libgcc-s1", "libxkbcommon0", "libwayland-client0", "libvulkan1 | libegl1"]
+# glibc 2.38 / GCC 13 libstdc++: the prebuilt ONNX Runtime (OCR) needs them.
+depends = ["libc6 (>= 2.38)", "libstdc++6 (>= 13)", "libgcc-s1", "libxkbcommon0", "libwayland-client0", "libvulkan1 | libegl1"]
 
 [pacman]
 depends = ["glibc", "gcc-libs", "libxkbcommon", "wayland", "hicolor-icon-theme"]

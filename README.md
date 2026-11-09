@@ -28,7 +28,7 @@ Download from the [4.0.0-beta.1 release](https://github.com/realspqrk/autorename
 | Windows 10/11 (x64) | `AutoRename-PDF_4.0.0-beta.1_x64-setup.exe` | Double-click it; no admin rights needed. Then open AutoRename-PDF from the Start menu. |
 | macOS 11+ (Apple silicon) | `AutoRename-PDF_4.0.0-beta.1_aarch64.dmg` | Open it and drag AutoRename-PDF into Applications. Signed and notarized by Apple. |
 | Linux (x86_64, any distro) | `autorename-pdf_4.0.0-beta.1_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
-| Ubuntu 22.04+ / Debian | `autorename-pdf_4.0.0~beta.1_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
+| Ubuntu 24.04+ / Debian 13+ | `autorename-pdf_4.0.0~beta.1_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
 | Arch / Omarchy | `autorename-pdf_4.0.0beta.1_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
 
 On Linux, run `integrate install` once for the menu entry and the right-click entries: `./autorename-pdf_*.AppImage integrate install` (AppImage) or `autorename-pdf integrate install`. Install details (uninstall, AppImage without FUSE): [docs/guide.md](docs/guide.md#install-details).
@@ -135,10 +135,10 @@ Every key with its default: [config.yaml.example](config.yaml.example). Ready-ma
 
 ## Beta status
 
-Tested for this beta: Windows 11 (installer, Explorer menu, command line), macOS 26 on Apple silicon (app, command line, OCR), Ubuntu 22.04 and 24.04 and Arch (packages, command line, OCR). Known limits:
+Tested for this beta: Windows 11 (installer, Explorer menu, command line), macOS 26 on Apple silicon (app, command line, OCR), Ubuntu 24.04 and Arch (packages, command line, OCR). Known limits:
 
 - macOS: Apple silicon only. The Finder Quick Actions (`integrate install`) are not tested yet.
-- Linux: x86_64 only. On Windows 11 the right-click entries are under "Show more options".
+- Linux: x86_64 with glibc 2.38 or newer (Ubuntu 24.04+, Debian 13+, current Arch/Fedora). On Windows 11 the right-click entries are under "Show more options".
 - The window, settings and file formats may still change before 4.0.0.
 
 ## Documentation
