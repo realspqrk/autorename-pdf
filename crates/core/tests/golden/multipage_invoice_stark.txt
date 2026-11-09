@@ -1,0 +1,75 @@
+Page 1:
+INVOICE - Page 1 of 3
+Invoice: MP-2025-0001
+Date: 01.03.2025
+From: Stark Industries Ltd
+To: Petermeir Digital Solutions e.U.
+Item 001: Widget Type-B EUR 12.50
+Item 002: Widget Type-C EUR 25.00
+Item 003: Widget Type-D EUR 37.50
+Item 004: Widget Type-E EUR 50.00
+Item 005: Widget Type-F EUR 62.50
+Item 006: Widget Type-G EUR 75.00
+Item 007: Widget Type-H EUR 87.50
+Item 008: Widget Type-I EUR 100.00
+Item 009: Widget Type-J EUR 112.50
+Item 010: Widget Type-K EUR 125.00
+Item 011: Widget Type-L EUR 137.50
+Item 012: Widget Type-M EUR 150.00
+Item 013: Widget Type-N EUR 162.50
+Item 014: Widget Type-O EUR 175.00
+Item 015: Widget Type-P EUR 187.50
+Item 016: Widget Type-Q EUR 200.00
+Item 017: Widget Type-R EUR 212.50
+Item 018: Widget Type-S EUR 225.00
+Item 019: Widget Type-T EUR 237.50
+Item 020: Widget Type-U EUR 250.00
+Item 021: Widget Type-V EUR 262.50
+Item 022: Widget Type-W EUR 275.00
+Item 023: Widget Type-X EUR 287.50
+Item 024: Widget Type-Y EUR 300.00
+Item 025: Widget Type-Z EUR 312.50
+Item 026: Widget Type-A EUR 325.00
+Item 027: Widget Type-B EUR 337.50
+Item 028: Widget Type-C EUR 350.00
+Item 029: Widget Type-D EUR 362.50
+Item 030: Widget Type-E EUR 375.00
+
+Page 2:
+Page 2 - Continued
+Item 031: Component-31 EUR 271.25
+Item 032: Component-32 EUR 280.00
+Item 033: Component-33 EUR 288.75
+Item 034: Component-34 EUR 297.50
+Item 035: Component-35 EUR 306.25
+Item 036: Component-36 EUR 315.00
+Item 037: Component-37 EUR 323.75
+Item 038: Component-38 EUR 332.50
+Item 039: Component-39 EUR 341.25
+Item 040: Component-40 EUR 350.00
+Item 041: Component-41 EUR 358.75
+Item 042: Component-42 EUR 367.50
+Item 043: Component-43 EUR 376.25
+Item 044: Component-44 EUR 385.00
+Item 045: Component-45 EUR 393.75
+Item 046: Component-46 EUR 402.50
+Item 047: Component-47 EUR 411.25
+Item 048: Component-48 EUR 420.00
+Item 049: Component-49 EUR 428.75
+Item 050: Component-50 EUR 437.50
+Item 051: Component-51 EUR 446.25
+Item 052: Component-52 EUR 455.00
+Item 053: Component-53 EUR 463.75
+Item 054: Component-54 EUR 472.50
+Item 055: Component-55 EUR 481.25
+Item 056: Component-56 EUR 490.00
+Item 057: Component-57 EUR 498.75
+Item 058: Component-58 EUR 507.50
+Item 059: Component-59 EUR 516.25
+Item 060: Component-60 EUR 525.00
+
+Page 3:
+Page 3 - Summary
+Subtotal: EUR 14,250.00
+VAT 20%: EUR 2,850.00
+TOTAL: EUR 17,100.00

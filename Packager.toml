@@ -1,0 +1,55 @@
+# cargo-packager base config (cargo-packager 0.11.8).
+# Do not run `cargo packager` directly: `cargo xtask dist --target <triple>`
+# builds, stages binaries + PDFium + licenses and adds the per-target fields
+# (version, binaries, binariesDir, resources, outDir, targetTriple).
+# Relative paths resolve against the repository root.
+# Runbook: playbooks/release.md
+
+name = "autorename-pdf"
+product-name = "AutoRename-PDF"
+identifier = "dev.autorename-pdf.app"
+publisher = "Gerhard Petermeir"
+authors = ["Gerhard Petermeir"]
+description = "Rename PDFs from their content (AI + OCR)"
+long-description = """
+AutoRename-PDF reads each PDF (text layer, offline OCR, page images), asks an
+AI provider for date, company, document type and total, and renames the file
+from a template. Every change can be undone."""
+homepage = "https://github.com/realspqrk/autorename-pdf"
+license-file = "LICENSE"
+copyright = "Copyright (c) Gerhard Petermeir"
+category = "Productivity"
+icons = [
+  "assets/icons/generated/png/autorename-pdf-16.png",
+  "assets/icons/generated/png/autorename-pdf-32.png",
+  "assets/icons/generated/png/autorename-pdf-48.png",
+  "assets/icons/generated/png/autorename-pdf-64.png",
+  "assets/icons/generated/png/autorename-pdf-128.png",
+  "assets/icons/generated/png/autorename-pdf-256.png",
+  "assets/icons/generated/png/autorename-pdf-512.png",
+  "assets/icons/generated/autorename-pdf.ico",
+  "assets/icons/generated/autorename-pdf.icns",
+]
+
+[nsis]
+# Per-user install (%LOCALAPPDATA%\Programs\AutoRename-PDF), no admin prompt.
+installMode = "currentUser"
+compression = "lzma"
+installer-icon = "assets/icons/generated/autorename-pdf.ico"
+# Upstream template + `integrate install/remove` hooks.
+template = "packaging/nsis/installer.nsi"
+
+[deb]
+desktop-template = "packaging/linux/autorename-pdf.desktop.hbs"
+section = "utils"
+depends = ["libc6", "libgcc-s1", "libxkbcommon0", "libwayland-client0", "libvulkan1 | libegl1"]
+
+[pacman]
+depends = ["glibc", "gcc-libs", "libxkbcommon", "wayland", "hicolor-icon-theme"]
+
+[appimage]
+
+[macos]
+minimum-system-version = "11.0"
+
+[dmg]

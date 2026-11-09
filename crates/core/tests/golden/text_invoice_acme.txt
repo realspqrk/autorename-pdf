@@ -1,0 +1,21 @@
+Page 1:
+INVOICE
+Invoice No: INV-2024-3038228
+Date: 15.03.2024
+From: ACME Corporation GmbH
+Industriestrasse 42, 8010 Graz, Austria
+VAT: ATU12345678
+To: Petermeir Digital Solutions e.U.
+Hauptplatz 1, 8530 Bad Gleichenberg, Austria
+Description Qty Unit Price Total
+-----------------------------------------------------------------
+Web Development Services 40 EUR 85.00 EUR 3,400.00
+Hosting & Maintenance 1 EUR 120.00 EUR 120.00
+SSL Certificate 1 EUR 29.00 EUR 29.00
+-----------------------------------------------------------------
+Subtotal EUR 3,549.00
+VAT 20% EUR 709.80
+TOTAL EUR 4,258.80
+Payment due: 14.04.2024
+Bank: Steiermärkische Sparkasse
+IBAN: AT12 3456 7890 1234 5678

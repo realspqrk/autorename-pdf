@@ -1,46 +1,30 @@
 ---
 name: test
-description: Run the test suite with coverage report. Use when tests need to be executed or verified.
+description: Run the AutoRename-PDF gates (fmt, clippy, tests), optional live provider tests, and point to Windows VM validation. Use when tests need to be executed or verified.
 user-invocable: true
-argument-hint: "[test_file_or_pattern]"
+argument-hint: "[crate, test target or filter]"
 allowed-tools:
   - Bash
   - Read
   - Grep
 ---
 
-# Run Tests
+# Run tests
 
-Run the project test suite using pytest.
+`PATH=$HOME/.local/share/mise/shims:$PATH` if `cargo` is missing. Use a 600 s timeout for cold builds.
 
-## Steps
+1. Once per checkout: `cargo xtask fetch-natives` (PDFium; without it extraction tests fail with `pdfium_missing`).
+2. Gates:
+   ```bash
+   cargo fmt --all --check
+   cargo clippy --workspace --all-targets -- -D warnings
+   cargo test --workspace
+   ```
+3. With an argument, narrow it, e.g. `cargo test -p autorename-core --test enrich`, `cargo test -p autorename-app --test cli <filter>`, or GUI: `cargo test -p autorename-app --bin autorename-pdf gui::`.
+4. Optional:
+   - OCR accuracy: `AUTORENAME_MODELS_DIR=<root with latin/> cargo test -p autorename-core --features ocr --test extract ocr_`
+   - Live providers (costs money, needs real keys in `.env`): `AUTORENAME_LIVE=1 cargo test -p autorename-core --test providers_live -- --ignored --nocapture`. A 401 with `sk-your-…` is a placeholder key.
+   - Offline end-to-end: `playbooks/live-poc.md`. Windows installer + context menu: `playbooks/windows-vm-validation.md`.
+5. Report passed/failed/ignored per target; for failures show the test name and assertion.
 
-1. Activate the venv before running any commands:
-
-```bash
-source venv/Scripts/activate
-```
-
-2. Run tests with coverage:
-
-```bash
-python -m pytest tests/ -v --tb=short --cov=. --cov-report=term-missing
-```
-
-3. If an argument is provided (e.g., `test_document_processing`), run only that test file:
-
-```bash
-python -m pytest tests/test_<argument>.py -v --tb=short
-```
-
-4. Report results to the user:
-   - Number of tests passed/failed/skipped
-   - Coverage percentage for key modules
-   - If failures: show the failing test name and assertion error
-
-## If Tests Fail
-
-- Read the failing test to understand what's expected
-- Read the source module being tested
-- Identify the root cause and suggest a fix
-- Do NOT modify tests to make them pass unless the test itself is wrong
+Snapshot changes: help text via `INSTA_UPDATE=always … help_snapshots`, GUI PNGs via `UPDATE_SNAPSHOTS=force`; review every diff. Do not change a test to make it pass unless the test is wrong.

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/app", "crates/winlaunch", "crates/xtask"]
+
+[workspace.package]
+version = "4.0.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.99"
+repository = "https://github.com/realspqrk/autorename-pdf"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1

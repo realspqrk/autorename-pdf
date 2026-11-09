@@ -1,0 +1,21 @@
+# AutoRename-PDF
+
+> Rename PDFs from their content (AI + local OCR): `acme-invoice.pdf` → `20240315 ACME Corporation AP EUR 4,258.80.pdf`. One binary `autorename-pdf` (GUI + CLI) for Windows, Linux, macOS. Every change is undoable.
+
+## Set up for a user
+- [Setup runbook](AGENTS.md#setup-runbook): install, `autorename-pdf setup --check`, `setup ...`, verify with the demo
+- `autorename-pdf setup --help`: flags and steps
+
+## Use
+- `autorename-pdf --help` first (typical workflow, agent rules), then `<command> --help` before first use (options, side effects); exit codes are in top-level `--help`
+- [README](README.md): install, first run, CLI quick start, reusing the extracted data
+- [Guide](docs/guide.md): how a PDF is read, offline mode, embedded data, name matching
+- [Demo with expected outputs](examples/demo/README.md)
+- Extracted data of a renamed PDF without a new AI call: `autorename-pdf inspect <pdf> -o json` → `.files[0].embedded.attachment`
+- `autorename-pdf schema`: JSON Schemas of plan, result, error, event, inspect, config
+- [Config reference](config.yaml.example) and [recipes](examples/)
+
+## Machine contract
+- `autorename-pdf --help`: output formats, error shape, exit codes, isolation (`AUTORENAME_PDF_DATA_DIR`), Windows behavior
+- Two steps: `rename --plan plan.json <paths>` → show the user → `apply plan.json`; read `autorename-pdf apply --help` before editing a plan
+- Local only: [offline checklist](docs/guide.md#offline-mode)

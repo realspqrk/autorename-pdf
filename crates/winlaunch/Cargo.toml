@@ -1,0 +1,17 @@
+[package]
+name = "autorename-winlaunch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "autorename-pdf-gui"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+embed-resource = "3.0.12"

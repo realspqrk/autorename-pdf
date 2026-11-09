@@ -1,296 +1,168 @@
 <div align="center">
   <h1>AutoRename-PDF</h1>
-  <p><b>AI PDF renamer for invoices, scanned documents, and academic papers.</b><br>
-  Turn PDF contents into filenames like <code>20260906 ACME AP 12,13.pdf</code>.</p>
+  <p><b>Rename PDFs from their content with AI and local OCR.</b><br>
+  <code>acme-invoice.pdf</code> → <code>20240315 ACME Corporation AP EUR 4,258.80.pdf</code></p>
   <p>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/ptmrio/autorename-pdf" alt="GitHub Release"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ptmrio/autorename-pdf" alt="MIT License"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/github/downloads/ptmrio/autorename-pdf/total" alt="Downloads"></a>
-    <a href="https://github.com/ptmrio/autorename-pdf/releases"><img src="https://img.shields.io/badge/platform-Windows-blue?logo=windows" alt="Platform: Windows"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/realspqrk/autorename-pdf" alt="GitHub Release"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/realspqrk/autorename-pdf" alt="MIT License"></a>
+    <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/downloads/realspqrk/autorename-pdf/total" alt="Downloads"></a>
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue" alt="Platform: Windows, Linux, macOS">
   </p>
 </div>
 
-Batch-rename PDFs from their contents with a Windows drag-and-drop GUI, a right-click action in Explorer, or a cross-platform Python CLI. Preview names, undo a batch, and keep vendor names consistent with fuzzy-matched aliases.
+Drop in invoices, letters and scans; get files named by date, company, document type and amount. AutoRename-PDF reads each PDF, asks an AI model (OpenAI, Anthropic, Gemini, xAI, or a local Ollama model) what it is, renames the file, and keeps the extracted data inside the PDF. Every change can be undone.
 
-| Profile | Example filename |
-|---------|------------------|
-| **Business** (default) | `20260906 ACME AP 12,13.pdf` — date, counterparty, AP/AR, printed total |
-| **Academic** | `20260101 Smith Nature Attention Is All You Need.pdf` — date, first author, venue, title |
-| **German ER/AR** | `20260906 ACME ER 12,13.pdf` — Eingangsrechnung / Ausgangsrechnung |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gui-preview-dark.png">
+  <img src="docs/images/gui-preview-light.png" alt="AutoRename-PDF: a list of PDFs with the proposed new name for each, and a Rename button">
+</picture>
 
-Use OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), or a local LLM through Ollama. Text extraction, PaddleOCR, and vision cover digital, scanned, and image-only PDFs. Invoice codes default to **AP/AR**. Copy a recipe from [`examples/`](examples/) or edit [config.yaml.example](config.yaml.example) (the comments are the schema).
+## Install
 
-| Start here | What you need |
-|----------|---------------|
-| [Windows ZIP / GUI](#quick-start) | Download the release, run setup, drag in PDFs. GUI and Explorer integration are Windows-only. |
-| [Offline / Ollama](#ollama-setup) | Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). No API key. |
-| [Python CLI on macOS / Linux](#macos--linux) | Install from source. |
-| [Developer setup](#developer-documentation) | Tests, architecture, builds. |
+Download from [Releases](https://github.com/realspqrk/autorename-pdf/releases). Each package contains the app window and the `autorename-pdf` command.
 
-![AutoRename-PDF desktop GUI showing drag-and-drop PDF renaming with AI-extracted metadata](screenshot/autorename-pdf-gui.png)
+| System | Download | Install |
+|---|---|---|
+| Windows 10/11 | [Download for Windows](https://github.com/realspqrk/autorename-pdf/releases/latest) (`AutoRename-PDF_<ver>_x64-setup.exe`) | On the release page, choose the file ending in `_x64-setup.exe`. Double-click it; no admin rights needed. When it's installed, open AutoRename-PDF from the Start menu. |
+| Linux (any distro) | `autorename-pdf_<ver>_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
+| Debian / Ubuntu | `autorename-pdf_<ver>_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
+| Arch | `autorename-pdf_<ver>_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
+| macOS | build from source | See [Development](#development). |
 
-## Contents
+On Linux, run `integrate install` once for the menu entry and the right-click entries: `./autorename-pdf_*.AppImage integrate install` (AppImage) or `autorename-pdf integrate install`. Install details (uninstall, AppImage without FUSE): [docs/guide.md](docs/guide.md#install-details).
 
-- [Windows quick start](#quick-start) · [Common questions](#common-questions)
-- [Configuration](#configuration) · [Example configs](#example-configs)
-- [Usage](#usage): [GUI](#gui) · [Explorer](#context-menu) · [CLI](#command-line)
-- [Company aliases](#company-name-harmonization) · [Ollama](#ollama-setup) · [macOS / Linux](#macos--linux)
-- [Developer documentation](#developer-documentation) · [Support](#support-the-project) · [MIT](LICENSE)
+## Rename your first PDFs
 
-<a id="quick-start"></a>
+1. **Open AutoRename-PDF.** The first time, a setup card asks how documents are read. Choose **Cloud provider**, paste your API key, click **Test connection**, enter your company name and click **Save and continue**. An API key is an access code from your AI provider, which charges per use; use a key from your company's account. **Get a key** next to the field opens your provider's key page (OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)). Prefer to keep everything on your computer? Install [Ollama](https://ollama.com) and download a model first ([offline checklist](docs/guide.md#offline-mode)), then choose **Offline on this computer**.
+2. **Drop PDFs or folders** into the window.
+3. **Check the proposed names.** Files that need a look have **Open** to compare with the original PDF. To change a name, click the pencil (or double-click the name, or press F2). Press **Rename**.
+4. Changed your mind? **Undo rename** on the result screen, or later under **History**.
 
-## Windows Quick Start: ZIP, GUI, and Explorer
+Also on the right-click menu of PDFs and folders: **AutoRename-PDF > Rename now** (renames straight away unless something needs a look) or **Preview** (Windows 11: under "Show more options").
 
-1. **Download** the latest [release ZIP](https://github.com/ptmrio/autorename-pdf/releases)
-2. **Extract** and run `setup.ps1` (right-click → "Run with PowerShell")
-3. **Configure** — copy `config.yaml.example` to `config.yaml` if setup did not, then set provider, **model**, and key together (see the table below):
-   ```yaml
-   ai:
-     provider: "openai"       # or anthropic, gemini, xai, ollama
-     model: "gpt-5.6-luna"    # must match the provider — do not keep an OpenAI model on Anthropic/Ollama
-     api_key: "your-key"      # or "${OPENAI_API_KEY}" from a .env beside this file
-   company:
-     name: "Your Company GmbH"
-   ```
-4. **Launch** `autorename-pdf-gui.exe` — or right-click any PDF in Explorer
+Your company name tells bills you receive (`AP`) from invoices you send (`AR`); change it under Settings (gear icon) > Naming. To see why a name was chosen, open the details panel (button at the right of the header, or <kbd>Ctrl</kbd>+<kbd>\</kbd>).
 
-> `setup.ps1` creates `config.yaml` from the template if missing, can add Explorer entries, and can install PaddleOCR (~500 MB) for scanned PDFs. Run it from normal PowerShell (not "Run as Administrator"). Only context-menu install/remove requests UAC.
+**Privacy in plain words:** text is read on your computer first. With the default settings, the text of the first three pages goes to the AI provider you chose; page images are sent only when the text cannot be read locally. You can change both in Settings (gear icon) > Processing. In offline mode documents stay on your computer or local network. [More](docs/guide.md#how-a-pdf-is-read).
 
-## Common Questions
+## Command line in 60 seconds
 
-**Does it work offline?** Yes — Ollama + PaddleOCR. Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub.
+The examples use bash (Windows PowerShell setup: `autorename-pdf setup --help`). `demo` is a copy of the repository's seven sample PDFs (`cp -r examples/demo ./demo`; all outputs in [its README](examples/demo/)); use your own folder instead.
 
-**Digital, scanned, and image PDFs?** Yes. pdfplumber always runs. Turn on `pdf.ocr` and/or `pdf.vision` (`false` / `true` / `"auto"`).
-
-**Cost?** The tool is MIT-licensed. Cloud usage is roughly ~$0.001–0.002 per PDF depending on model. Ollama has no API fee.
-
-**macOS or Linux?** CLI yes. GUI and Explorer are Windows-only.
-
-**Preview or undo?** GUI **Preview names**, CLI `--dry-run`, then undo. Already-correct names are skipped.
-
-**Research papers?** `profile: academic`, `rename --profile academic`, or [`examples/academic.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/academic.yaml).
-
-## Configuration
-
-The schema lives in [config.yaml.example](config.yaml.example). Copy it to `config.yaml`. Any string may use `${VAR_NAME}`; a `.env` next to the config is loaded automatically (see `.env.example`).
-
-| Provider | Flagship | Budget |
-|----------|----------|--------|
-| OpenAI | `gpt-5.6-sol` | `gpt-5.6-luna` |
-| Anthropic | `claude-sonnet-5` | `claude-haiku-4-5` |
-| Gemini | `gemini-3.8-flash` | `gemini-3.5-flash-lite` |
-| xAI | `grok-4.6` | `grok-4.3` |
-| Ollama | `qwen3:8b` | `qwen3:4b` / `llama3.2:3b` |
-
-<a id="example-configs"></a>
-
-### Example configs
-
-Copy a file from [`examples/`](https://github.com/ptmrio/autorename-pdf/tree/main/examples) over `config.yaml`, then set your API key and company name. Those recipes are in the GitHub repo, not in the Windows ZIP (the ZIP ships `config.yaml.example` only).
-
-| Recipe | What it changes |
-|--------|-----------------|
-| [academic.yaml](examples/academic.yaml) | `profile: academic` |
-| [er-ar.yaml](examples/er-ar.yaml) | `incoming_invoice: ER` (Eingangsrechnung) |
-| [ollama-offline.yaml](examples/ollama-offline.yaml) | `provider: ollama`, `ocr: true`, empty API key |
-| [vision-cloud.yaml](examples/vision-cloud.yaml) | `vision: true`, no PaddleOCR |
-| [invoice-id.yaml](examples/invoice-id.yaml) | printed total **and** invoice number |
-
-```yaml
-# Academic for one run, without saving config
-# .\autorename-pdf-cli.exe rename --profile academic paper.pdf
-
-profile: academic
+```console
+$ export OPENAI_API_KEY=sk-...
+$ autorename-pdf setup --provider openai --api-key-env OPENAI_API_KEY --company "Spqrk"
+$ autorename-pdf rename --dry-run demo          # preview; changes nothing
+  acme-invoice.pdf           →  20240315 ACME Corporation AP EUR 4,258.80.pdf
+  globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf
+  ...
+  invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf
+  rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf
+  ...
+Dry run: 7 to rename (nothing changed)
+$ autorename-pdf rename demo                    # rename for real (analyzes again;
+                                                # rename --plan + apply analyzes once)
+$ autorename-pdf undo                           # everything back, byte for byte
 ```
 
-```yaml
-# German bookkeeping codes (also examples/er-ar.yaml)
-pdf:
-  incoming_invoice: ER   # Eingangsrechnung
-  outgoing_invoice: AR   # Ausgangsrechnung
-```
+`setup` is safe to re-run and stores the key in a `.env` file beside the config, never in the config itself. Offline instead: `ollama pull gemma4`, then `autorename-pdf setup --offline --ollama-model gemma4 --company "Spqrk"` ([checklist](docs/guide.md#offline-mode)).
 
-`rename --profile` overrides `profile` for that run. Built-ins are `business` and `academic`. Overlays go under `profiles:` — see comments in `config.yaml.example`. `config validate` checks every declared profile.
-
-## Usage
-
-<a id="gui"></a>
-
-### Windows GUI: Drag, Preview, and Rename
-
-Launch `autorename-pdf-gui.exe` and drop PDF files or folders. **Preview names** (secondary) inspects proposed names; **Rename** applies them. Undo reverses the last batch that actually renamed files. The titlebar toggles light/dark; Settings has System / Light / Dark (stored in the app, not in `config.yaml`).
-
-Settings is a read-only inspector of `config.yaml`. Validate or open the folder there; edit the YAML to change behavior.
-
-<a id="context-menu"></a>
-
-### Rename PDFs from Windows Explorer
-
-After setup installs context menus:
-
-- **Single PDF** → `Auto Rename PDF`
-- **Folder** → `Auto Rename PDFs in Folder`
-- **Folder background** → `Auto Rename PDFs in This Folder`
-
-Windows 11: under "Show more options" (Shift+F10).
-
-<a id="command-line"></a>
-
-### Command Line: Batch Rename and JSON
-
-PowerShell in the extracted ZIP folder (note `.\` and `rename` before flags). From source use `python autorename-pdf.py` after [installing](#macos--linux).
-
-![AutoRename-PDF CLI showing PDF renaming in PowerShell](screenshot/autorename-pdf-cli.png)
-
-```powershell
-.\autorename-pdf-cli.exe "C:\path\to\file.pdf"
-.\autorename-pdf-cli.exe rename --dry-run "C:\path\to\folder"
-.\autorename-pdf-cli.exe rename --recursive "C:\path\to\folder"
-.\autorename-pdf-cli.exe undo
-.\autorename-pdf-cli.exe rename --provider anthropic --model claude-sonnet-5 "file.pdf"
-.\autorename-pdf-cli.exe rename --profile academic "paper.pdf"
-.\autorename-pdf-cli.exe rename --vision --ocr "scanned.pdf"
-.\autorename-pdf-cli.exe rename --output json "C:\path\to\folder"
-```
-
-JSON includes `total` / `renamed` / `skipped` / `failed`, `batch_id`, and per-file `profile` plus raw `fields`. Files whose names already match are skipped.
-
-<details>
-<summary><strong>Full CLI reference</strong></summary>
-
-#### Subcommands
-
-| Subcommand | Description |
-|------------|-------------|
-| `rename` | Rename PDF files (default if omitted) |
-| `undo` | Reverse file renames using the undo log |
-| `config show` | Display current configuration (API keys redacted) |
-| `config validate` | Validate configuration and report issues |
-| `config inspect` | JSON snapshot combining show + validation (GUI) |
-
-#### Rename options
-
-| Flag | Description |
-|------|-------------|
-| `--dry-run` | Show names without renaming |
-| `--recursive`, `-r` | Process folders recursively |
-| `--provider` / `--model` | Override config for this run |
-| `--vision` / `--ocr` / `--text-only` | Extraction overrides |
-| `--profile` | Extraction profile id (overrides config) |
-| `--output`, `-o` | `text` or `json` |
-| `--quiet`, `-q` / `--verbose`, `-v` | Logging |
-| `--config` | Path to `config.yaml` |
-
-#### Undo options
-
-| Flag | Description |
-|------|-------------|
-| `--list` | List undo batches |
-| `--batch <id>` | Undo one batch |
-| `--all` | Undo every batch |
-
-#### Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Usage error |
-| 3 | Configuration error |
-| 4 | No files found |
-| 5 | Partial failure |
-| 10 | AI provider error |
-| 11 | Authentication error |
-
-</details>
-
-## Company Name Harmonization
-
-Copy [harmonized-company-names.yaml.example](harmonized-company-names.yaml.example) to `harmonized-company-names.yaml`:
-
-```yaml
-ACME:
-  - "ACME Corp"
-  - "ACME Inc."
-```
-
-Jaro-Winkler matching maps OCR typos to the canonical name. Academic profile skips this file.
-
-**Tip:** Paste your filenames into an LLM with *"Create a harmonized-company-names.yaml mapping these variations to standardized names."*
-
-<a id="ollama-setup"></a>
-
-## Offline PDF Renaming with Ollama and PaddleOCR
-
-Copy [`examples/ollama-offline.yaml`](https://github.com/ptmrio/autorename-pdf/blob/main/examples/ollama-offline.yaml) from GitHub (not in the ZIP). Download models **before** going offline; keep Ollama running.
-
-```powershell
-winget install -e --id Ollama.Ollama
-ollama pull qwen3:4b
-```
-
-| Model | VRAM | Best for |
-|-------|------|----------|
-| `qwen3:8b` | ~5 GB | Most text PDFs |
-| `qwen3-vl:8b` | ~6 GB | Scanned/image PDFs (`vision: true`) |
-| `qwen3:4b` | ~3 GB | Budget GPU |
-| `llama3.2:3b` | ~2.5 GB | Minimal hardware |
-
-Windows 10 22H2+ or Windows 11. GPU with 6+ GB VRAM recommended (CPU-only works with 16+ GB RAM). See [ollama.com](https://ollama.com).
-
-<a id="macos--linux"></a>
-
-## Python CLI on macOS / Linux
-
-CLI: Python 3.11+. GUI and context menu: Windows-only.
+**`autorename-pdf --help` is the manual.** It starts with the typical workflow and lists the exit codes; `autorename-pdf <command> --help` explains each command's options and side effects, with examples. Add `-o json` to any command for machine-readable output.
 
 ```bash
-git clone https://github.com/ptmrio/autorename-pdf.git
-cd autorename-pdf
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp config.yaml.example config.yaml   # or cp examples/academic.yaml config.yaml
-python autorename-pdf.py rename --dry-run invoice.pdf
+autorename-pdf rename -r ~/Documents/Inbox              # include subfolders
+autorename-pdf rename --plan plan.json ~/Scans          # save the proposal; change nothing
+autorename-pdf apply plan.json                          # rename from it, no new AI calls
+autorename-pdf rename --ocr=on --vision=off scan.pdf    # read scans locally, never send images
+autorename-pdf setup --ocr-models                       # local OCR for scans (~40 MB, once)
+autorename-pdf undo --list                              # all past runs; undo --batch <id>
 ```
 
-PaddleOCR venv and logs default to `~/.local/share/autorename-pdf/`.
+## Use the extracted data
 
-## Support the Project
+Each renamed PDF carries an `autorename-pdf.json` attachment with the fields, the page text that was used and the model. Scripts, spreadsheets and other AI tools can reuse it without reading the PDF again:
 
-- ⭐ [Star this repo](https://github.com/ptmrio/autorename-pdf)
-- 💖 [GitHub Sponsors](https://github.com/sponsors/ptmrio)
-- ☕ [Ko-fi](https://ko-fi.com/spqrk)
-- 💛 [PayPal](https://paypal.me/realSPQRK)
+```console
+$ autorename-pdf inspect demo/*.pdf -o json \
+    | jq -r '.files[].embedded.attachment.fields | [.document_date, .company_name, .currency, .total_amount] | @csv'
+"15.03.2024","ACME Corporation","EUR","4,258.80"
+"28.06.2024","Initech Solutions","EUR","237.50"
+...
+```
 
-Also: [PhraseVault](https://phrasevault.app) — text expander by the same developer.
+Any PDF tool can read the attachment too (qpdf, pdfdetach: [examples](docs/guide.md#embedded-data)). The title, subject, keywords and XMP metadata are set as well, so desktop search and document systems find the data. Signed, encrypted and PDF/A files and e-invoices are renamed but left byte-identical.
 
-Thank you [@claus82](https://github.com/claus82).
+## Keep company names consistent
 
-<a id="developer-documentation"></a>
+The app remembers each company the first time you rename a PDF from it and reuses that spelling. In the Name matching tab: if the same company appears twice, select the spelling you don't want, choose **Merge into**, and pick the name to keep. To change one company's spelling, choose **Rename**. Existing file names stay as they are; future documents use the new name. On the command line ([full walkthrough](docs/guide.md#name-matching)):
 
-## Developer Documentation
+```console
+$ autorename-pdf names rename "ACME Corporation" ACME
+$ autorename-pdf rename --dry-run demo/acme-invoice.pdf     # a fresh copy of the demo file
+  acme-invoice.pdf  →  20240315 ACME AP EUR 4,258.80.pdf
+```
 
-<details>
-<summary><strong>Setup, architecture, tests, and builds</strong></summary>
+`names review` lists names the app was unsure about; `names merge` joins two entries. How matching works: [docs/guide.md](docs/guide.md#name-matching).
 
-Python 3.11+ (CLI). Optional OCR embed: Python 3.13.15, PaddlePaddle 3.3.1 / PaddleOCR 3.7.0 (`PP-OCRv6_small` defaults).
+## Customize
+
+| Profile | Example file name |
+|---|---|
+| `business` (default) | `20240315 ACME AP EUR 4,258.80.pdf`: date, company, AP/AR (bill received / invoice sent), total |
+| `academic` | `20260101 Smith Nature Attention Is All You Need.pdf`: date, first author, venue, title |
+| your own | any fields and template under `profiles:` in the config |
+
+```yaml
+# config.yaml: add the printed invoice number to business names
+profiles:
+  business:
+    fields:
+      invoice_id:
+        description: "Copy the printed invoice number exactly. Empty if absent."
+    template: "{document_date} {company_name} {document_type} {description} {invoice_id}"
+```
+
+Every key with its default: [config.yaml.example](config.yaml.example). Ready-made recipes (academic, German ER/AR, invoice number, offline, cloud vision): [examples/](examples/). `autorename-pdf config path` shows where the config lives; `config validate` checks it.
+
+## For AI agents
+
+- Paste into Claude Code, Codex, Cursor or any agent with a shell: *"Set up AutoRename-PDF from https://github.com/realspqrk/autorename-pdf for me. Follow AGENTS.md › Setup runbook."* It asks you only for your API key (or offline) and your company name.
+- The runbook: [AGENTS.md › Setup runbook](AGENTS.md#setup-runbook). Entry point for LLMs: [llms.txt](llms.txt).
+- After installing, read `autorename-pdf --help`, then `autorename-pdf <command> --help` before first use of a command.
+- Rename in two steps: `rename --plan plan.json <paths>` → show the user the names → `apply plan.json`; `undo` reverts.
+- Always `-o json`; stdout carries only data, exit codes are listed in `--help`. Claude Code users: the repo ships a `/rename-pdfs` skill.
+
+## Documentation
+
+| Topic | Where |
+|---|---|
+| Install details, how a PDF is read, offline mode, embedded data, name matching | [docs/guide.md](docs/guide.md) |
+| Every command, option, side effect, exit code | `autorename-pdf --help`, `autorename-pdf <command> --help` |
+| Every config key | [config.yaml.example](config.yaml.example), recipes in [examples/](examples/) |
+| JSON Schemas of the machine output | `autorename-pdf schema` |
+| Upgrading from 3.x | [docs/migration-3-to-4.md](docs/migration-3-to-4.md) |
+
+## Development
+
+Rust 1.99+ ([rustup](https://rustup.rs)). Architecture, commands and rules: [AGENTS.md](AGENTS.md).
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
-cp config.yaml.example config.yaml
-python -m ruff check .
-pytest tests/ -v --cov
-pytest tests/ --run-live --provider ollama -v
-python build.py --nosign
+cargo xtask fetch-natives                     # pinned PDFium into vendor/ (once)
+cargo run -p autorename-app -- rename --dry-run examples/demo
+AUTORENAME_GUI_DEMO=1 cargo run -p autorename-app -- gui     # demo data, no disk or network
+cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
+cargo build --release -p autorename-app      # macOS: target/release/autorename-pdf
 ```
 
-Functional Python; `_*.py` modules are internal. OpenAI/Anthropic use native structured parse; Instructor is only for Gemini, xAI, and Ollama. Agent notes: `AGENTS.md` / `CLAUDE.md`.
+Intel Macs: add `--no-default-features --features gui` (no OCR). Release and packaging: [playbooks/release.md](playbooks/release.md). Issues and forks are welcome; pull requests are not being accepted right now.
 
-Contributions: issues and forks welcome; we are not taking PRs right now.
+## Support
 
-</details>
+Enjoying AutoRename-PDF? It may save you hours. Even in the age of AI, building and maintaining it takes a lot of time and resources. Please consider a donation — or try [PhraseVault](https://phrasevault.app), our text expander. You may enjoy it too.
 
----
+[GitHub Sponsors](https://github.com/sponsors/realspqrk) · [Ko-fi](https://ko-fi.com/spqrk) · [PayPal](https://paypal.me/realSPQRK) · [Star the repo](https://github.com/realspqrk/autorename-pdf). Thank you [@claus82](https://github.com/claus82).
 
-MIT License — Made by [Gerhard Petermeir, SPQRK Web Solutions](https://github.com/ptmrio)
+## License
+
+[MIT](LICENSE). Bundles [PDFium](https://pdfium.googlesource.com/pdfium/) (BSD-3-Clause) and, with OCR, ONNX Runtime (MIT); OCR models are PaddleOCR (Apache-2.0). Made by [Gerhard Petermeir, SPQRK Web Solutions](https://github.com/realspqrk).
+
+**Legal:** provided as is, without warranty of any kind; no liability for renamed or modified files — keep backups. Imprint: SPQRK IT-Services · Gerhard Petermeir, BA MSc · Haag 8, 8344 Bad Gleichenberg, Austria · office@spqrk.net · VAT ATU69739438.

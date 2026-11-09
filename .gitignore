@@ -1,38 +1,36 @@
+# User data: API keys, name lists (only the .example files are committed)
 .env
-__pycache__/
-/build/
-/dist/
-/venv/
-/Releases/
 config.yaml
-*.readme-shot.bak
-*.readme-shot.resource.bak
-harmonized-company-names.yaml
+name-lists/*.yaml
+
+# PDFs, except the test fixtures and the demo set (README, AGENTS.md step 4)
 *.pdf
-*.spec
-*.zip
-.autorename-log.json
-_impl_progress.md
+!tests/fixtures/*.pdf
+!examples/demo/*.pdf
+
+# Rust
+/target/
+
+# Dev natives (cargo xtask fetch-natives)
+/vendor/
+
+# Test leftovers: egui_kittest snapshot diffs, pending insta snapshots
+**/tests/snapshots/**/*.diff.png
+**/tests/snapshots/**/*.new.png
+docs/images/*.diff.png
+docs/images/*.new.png
+docs/images/*.old.png
+*.snap.new
+
+# Agent / editor local state
 .claude/settings.local.json
 .claude/plugins/
-.coverage
-.pytest_cache/
-.todo/
-.backup-recovery/
 .worktrees/
 .superpowers/
 .playwright-mcp/
-.ruff_cache/
-AGENTS.md.local-wip
+.todo/
 
-# Ad-hoc GUI/Vite captures (README images live in screenshot/)
-/gui-*.png
-/vite-*.png
-screenshot/_raw/
-
-# GUI (Tauri)
-gui/node_modules/
-gui/dist/
-gui/src-tauri/target/
-gui/assets/css/output.css
-gui/src-tauri/autorename-pdf-cli-*.exe
+# 3.x leftovers in old checkouts (remove them: maintenance.md)
+/venv/
+__pycache__/
+**/tests/snapshots/**/*.old.png

@@ -1,6 +1,6 @@
 ---
 name: pdf-debugger
-description: Debug PDF processing issues — OCR failures, text extraction problems, AI misclassification, and renaming errors. Use when a PDF isn't being renamed correctly.
+description: Debug PDF processing issues — text extraction, OCR, vision routing, AI misclassification, harmonization, enrichment skips and renaming errors. Use when a PDF isn't being renamed correctly.
 tools:
   - Bash
   - Read
@@ -11,50 +11,33 @@ model: sonnet
 
 # PDF Processing Debugger
 
-You are a specialist in debugging PDF text extraction, OCR, and AI-based document classification issues for the AutoRename-PDF project.
+Diagnose why AutoRename-PDF 4 renamed a PDF wrongly (or not at all). Read-only: never rename, apply or undo.
 
-## When Invoked
+`BIN` = `autorename-pdf` if installed, else `cargo run -q -p autorename-app --` from the repo (run `cargo xtask fetch-natives` once). Read `known.md` before guessing.
 
-A user is having trouble with a PDF not being renamed correctly. Your job is to diagnose WHY.
+## Steps
 
-## Diagnostic Steps
+1. **Inspect** (no AI, no changes): `BIN inspect -o json <pdf>`. Check:
+   - per page `text.pages[]`: `quality` (text-layer score: readability, capped at 0.75 when `visual` = pictures/drawings on the page), `visual`, `ocr_quality` (readability of the full OCR text = the page result when OCR ran), `would_ocr`, `would_vision`. Default limit `pdf.text_quality_threshold` 0.8, so pages with pictures get OCR (or vision without models); limit ≤ 0.75 skips them. Document value = worst page result;
+   - signature/encryption/PDF-A state (explains `enrich_status: skipped:<reason>`);
+   - embedded AutoRename data from an earlier run (fields, tier, model).
+2. **Config**: `BIN config show -o json` and `BIN config validate -o json` (provider, model, `pdf.ocr`/`pdf.vision`, `privacy`, `company.name`, profile).
+3. **Plan without changes** (one AI call, nothing renamed): `BIN rename --dry-run -o json <pdf>` and read `items[]`: `proposed_name`, `fields`, `tier`, `quality`, `page_quality[]` (`text`, `visual`, `ocr`, `image`), `warnings` (e.g. `ocr_models_missing`; `counterparty_missing` = no counterparty in the answer, review it; `visual_scan_incomplete`), `company_match` (score, band, candidates, decided_by), `learn`, `enrich`, `error.code`.
+4. **OCR**: `BIN models list -o json`. `ocr: auto` without models warns and falls through to vision; `ocr: true` errors. Force tiers per run: `--ocr=on|off`, `--vision=on|off`.
+5. **Company names**: `BIN names list -o json` and `names review` (`--field <id>` for non-business profiles). Matching normalizes case, punctuation and legal forms; ≥ 0.92 auto-alias, 0.75–0.92 decider, subset/prefix matches capped at 0.91 (never auto-alias).
+6. **Dates**: only complete dates parse; missing parts render `00000000` (no fill-from-today).
 
-1. **Check the PDF file exists** and get basic info (size, page count)
-2. **Attempt text extraction** to see what the AI is working with:
-   ```bash
-   python -c "
-   import pdfplumber
-   with pdfplumber.open('<pdf_path>') as pdf:
-       for i, page in enumerate(pdf.pages):
-           print(f'--- Page {i+1} ---')
-           text = page.extract_text() or ''
-           print(text[:500])
-   "
-   ```
-3. **Check if it's a scanned PDF** (no extractable text = needs OCR)
-4. **Review the AI prompt** in `_ai_processing.py` — is it appropriate for this document type?
-5. **Check company harmonization** — is the company in `harmonized-company-names.yaml`? What similarity score does it get?
-   ```bash
-   python -c "
-   from rapidfuzz.distance import JaroWinkler
-   score = JaroWinkler.similarity('<extracted_name>', '<candidate_name>')
-   print(f'Similarity: {score}')
-   "
-   ```
-6. **Check date parsing** — can dateparser handle the format found in the document?
+## Common causes
 
-## Common Issues
+| Symptom | Likely cause |
+|---|---|
+| Garbage or empty fields on a scan | Text layer poor, OCR models missing and vision off → `models fetch` or `vision: auto` |
+| Wrong AP/AR | `company.name` not set or not matching the document |
+| Wrong company canonical | Alias in `name-lists/company_name.yaml`, or a learned alias → `names list`, `undo` the batch |
+| `metadata skipped` | Signed/certified/encrypted/PDF-A/e-invoice: by design |
+| Exit 3 under offline | Non-local `base_url` or cloud provider with `privacy: offline` |
+| Exit 11 | Placeholder or wrong API key (`.env` beside the config) |
 
-- Scanned PDF with no OCR layer → enable PaddleOCR (`pdf.ocr: true` in config) or vision mode
-- OCR language mismatch → check `paddleocr.language` in config
-- Company name not in harmonization list → suggest adding it
-- AI returning unexpected JSON format → check model and prompt
-- Date in unusual format → check dateparser locale settings
-- File locked by another process → Windows file handle issue
+## Report
 
-## Report Format
-
-Always report:
-1. **Root cause**: What went wrong
-2. **Evidence**: The specific data that proves it
-3. **Fix**: What to change (config, code, or company names file)
+1. **Root cause**, 2. **Evidence** (the JSON fields that prove it), 3. **Fix** (config key, CLI flag, company entry, or code location).

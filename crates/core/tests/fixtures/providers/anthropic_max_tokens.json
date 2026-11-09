@@ -1,0 +1,1 @@
+{"id":"msg_01C","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"{\"company_name\":\"ACME"}],"stop_reason":"max_tokens","stop_sequence":null,"usage":{"input_tokens":905,"output_tokens":2048}}

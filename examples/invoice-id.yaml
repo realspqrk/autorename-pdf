@@ -1,46 +1,21 @@
 # Business invoices with printed total AND printed invoice number.
-# Copy to config.yaml. Set ai.api_key and company.name.
 # Filename: 20260906 ACME AP 12,13 12345.pdf
-# description stays the printed total; invoice_id is empty when absent or not an invoice.
-# Overlay merges into the built-in business profile. Do not duplicate the whole field list.
+# `description` stays the printed total; invoice_id is empty when absent.
+# The overlay merges into the built-in business profile: do not repeat its fields.
+# Every key not listed here uses its default (see config.yaml.example).
+config_version: 4
 
 ai:
-  provider: "openai"
-  model: "gpt-5.6-luna"
-  api_key: "your-api-key-here"
-  base_url: ""
-  temperature: 0.0
-  max_retries: 2
-
-pdf:
-  max_pages: 3
-  ocr: false
-  vision: false
-  text_quality_threshold: 0.3
-  incoming_invoice: "AP"
-  outgoing_invoice: "AR"
-
-paddleocr:
-  venv_path: ""
-  language: "en"
-  device: "auto"
-  detection_model: ""
-  det_limit_side_len: 736
-  cpu_threads: 4
+  provider: openai
+  api_key: "${OPENAI_API_KEY}"
 
 company:
-  name: "Your Company Name"
+  name: "Your Company Ltd"
 
-output:
-  language: "English"
-  date_format: "%Y%m%d"
-
-profile: business
 profiles:
-  business:                      # overlay on the built-in — do not paste the whole field list
+  business:
     fields:
-      invoice_id:                # extra field; empty when absent or not an invoice
+      invoice_id:
         description: "Copy the printed invoice number exactly, without an Invoice or Rechnung label. Empty if absent or the document is not an invoice."
-    template: "{document_date} {company_name} {document_type} {description} {invoice_id}"  # default omits {invoice_id}
-    truncate_field: description  # unchanged — still the printed total, not the invoice number
-prompt_extension: ""
+    template: "{document_date} {company_name} {document_type} {description} {invoice_id}"
+    truncate_field: description   # unchanged: the total is shortened first, never the number

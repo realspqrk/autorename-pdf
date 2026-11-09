@@ -1,72 +1,104 @@
-# AutoRename-PDF v2 — copy this file to config.yaml next to the EXE or CLI.
-# An LLM can configure this project from these comments. Do not invent keys.
+# AutoRename-PDF 4 — full config reference.
 #
-# Default filenames (profile: business):
-#   20260906 ACME AP 12,13.pdf
-#   AP = incoming vendor bill (Accounts Payable)
-#   AR = invoice you sent (Accounts Receivable)
-#   Last token is the printed invoice total; omitted if none is printed.
+# Location: --config FILE > $AUTORENAME_PDF_CONFIG > OS config dir
+#   Linux   ~/.config/autorename-pdf/config.yaml
+#   Windows %APPDATA%\autorename-pdf\config.yaml
+#   macOS   ~/Library/Application Support/autorename-pdf/config.yaml
+# `autorename-pdf config init` writes a starter file there; `config path` prints it.
 #
-# Required: ai.provider, ai.model, ai.api_key (empty only for ollama), company.name.
-# Recipes (GitHub only — not in the Windows ZIP):
-#   https://github.com/ptmrio/autorename-pdf/tree/main/examples
-#   academic.yaml, er-ar.yaml, ollama-offline.yaml, vision-cloud.yaml, invoice-id.yaml
-# One-run override: rename --profile academic
+# Every key is optional; omitted keys (or `null`) use the defaults shown here.
+# Unknown keys are errors. YAML 1.2: write true/false, not yes/no/on/off.
+# `${VAR}` reads the environment first, then a .env file beside this file.
+# Check with: autorename-pdf config validate
+#
+# Default filename (profile: business):  20260906 ACME AP 12,13.pdf
+#   date · counterparty · AP (bill you received) / AR (invoice you sent) · printed total
+# Recipes: examples/ (academic, er-ar, invoice-id, ollama-offline, vision-cloud)
+config_version: 4
+
+# cloud: use ai.provider below. offline: local/LAN Ollama only; any other
+# network request is an error (exit 3). Same as the --offline flag.
+privacy: cloud
 
 ai:
-  provider: "openai"              # openai | anthropic | gemini | xai | ollama
-  model: "gpt-5.6-luna"          # openai: gpt-5.6-luna / gpt-5-mini
-                                 # anthropic: claude-sonnet-4-6 / claude-haiku-4-5-20251001
-                                 # gemini: gemini-3.1-flash-lite / gemini-3-flash-preview
-                                 # xai: grok-4.20-beta-0309-non-reasoning
-                                 # ollama: qwen3:4b (local; no API key)
-  api_key: "your-api-key-here"   # Literal key, or "${OPENAI_API_KEY}" from .env beside this file
-                                 # ollama: use ""
-  base_url: ""                    # Optional proxy / custom OpenAI-compatible endpoint
-  temperature: 0.0               # Ignored for OpenAI/Anthropic native structured parse
-  max_retries: 2                  # Retry failed provider calls
+  provider: openai              # openai | anthropic | gemini | xai | ollama
+  model: null                   # null = provider default:
+                                #   openai gpt-6-luna · anthropic claude-haiku-5-5
+                                #   gemini gemini-3.5-flash-lite · xai grok-4.7 · ollama gemma4
+  api_key: "${OPENAI_API_KEY}"  # literal key or ${VAR}; empty for ollama
+  base_url: ""                  # empty = provider default (ollama: http://localhost:11434)
+  temperature: 0.0
+  max_retries: 2                # retries for retryable provider errors (429, 5xx, timeouts)
 
 pdf:
-  max_pages: 3                    # Pages read per PDF (pdfplumber always runs)
-  ocr: false                      # false | true | "auto" — local PaddleOCR (install via setup.ps1)
-  vision: false                   # false | true | "auto" — send page images to a vision-capable model
-  text_quality_threshold: 0.3     # "auto" OCR/vision runs when text quality is below this
-  incoming_invoice: "AP"          # Incoming vendor bills. German: "ER" (Eingangsrechnung; examples/er-ar.yaml)
-  outgoing_invoice: "AR"          # Invoices you send. German Ausgangsrechnung also uses "AR"
+  max_pages: 3                  # pages read and sent to the AI per PDF
+  # Free first: text layer -> local OCR -> page images to the model.
+  # Decided per page (the first max_pages pages).
+  ocr: auto                     # true | false | auto. auto = pages scoring below the threshold.
+                                # Needs `autorename-pdf models fetch`; auto without models:
+                                # warning `ocr_models_missing`, then vision. true without models: error.
+  vision: auto                  # true | false | auto. auto = only pages still below it after OCR.
+                                # privacy: offline sends images to the local Ollama model only.
+  text_quality_threshold: 0.8   # per-page score (0..1). Text-layer readability: 1 = clean text, any
+                                # length; replacement/private-use/control chars and leftover mojibake
+                                # lower it (2 % broken chars = 0.8). Pages with pictures or drawings
+                                # (logos, scans) score at most 0.75, so above 0.75 they are read with
+                                # OCR. After OCR a page scores its OCR text. 1.0 = clean text, no pictures.
+  incoming_invoice: AP          # document_type for invoices you receive (German: ER)
+  outgoing_invoice: AR          # document_type for invoices you send
 
-paddleocr:                        # Used only when pdf.ocr is true or "auto"
-  venv_path: ""                   # Empty = auto-detect the setup.ps1 venv
-  language: "en"                  # One code per instance: "en" (smaller) or "de"/"fr"/… (latin, includes English)
-  device: "auto"                 # auto | cpu | gpu
-  detection_model: ""            # Empty = PP-OCRv6_small_det. Accuracy: PP-OCRv5_server_det
-  det_limit_side_len: 736        # Lower = less RAM
-  cpu_threads: 4
+ocr:
+  language: auto                # auto = every installed model pack (latin: English, German, French
+                                # and 45 more at once); or a pack id (latin) or language code (de)
+  threads: 4                    # CPU threads for OCR inference
 
 company:
-  name: "Your Company Name"      # Your firm — excluded as counterparty on invoices
+  name: ""                      # YOUR company: excluded as counterparty, tells AP from AR
 
 output:
-  language: "English"            # Language for non-invoice document_type labels (Letter, Contract, …)
-  date_format: "%Y%m%d"         # Filename date (strftime). Parsed dates are dd.mm.YYYY from the model.
+  language: English             # language of non-invoice document types (Letter, Contract, ...)
+  date_format: "%Y%m%d"         # strftime; incomplete dates render as 00000000
+  amount_format: "{currency} {amount}"  # invoice amount in names, e.g. "{amount} {currency}"
 
-# Built-ins: business (default) | academic
-# Academic filename: 20260101 Smith Nature Attention Is All You Need.pdf
-# Empty venue is omitted. Year-only publication dates become 01.01 of that year.
-profile: business
-# profile: academic
+enrich:
+  enabled: true                 # embed Title/Subject/Keywords, XMP and an autorename-pdf.json
+                                # attachment (incremental update; signed/encrypted/PDF-A skipped;
+                                # undo restores the original bytes). Off for one run: --no-enrich
 
-# Overlay or add profiles here. Duplicate YAML keys are errors.
-# Overlay merges into the built-in: scalars replace; new fields append; field: null deletes.
-# Templates are basenames without .pdf. Escape literal braces as {{ }}.
-# truncate_field = non-date field shortened first. Academic does not use company aliases.
-# Three-component opt-out (both keys required):
+harmonization:
+  auto_learn: true              # Name matching: learn variants of the profile's harmonize_field
+                                # into name-lists/<field>.yaml beside this file (business:
+                                # name-lists/company_name.yaml). Off for one run: --no-learn
+  decider: ai                   # ambiguous matches: ai | openai-decisions | jev | off
+                                # off = keep the new name, flagged `review: true`
+  decider_api_key: ""           # key for openai-decisions / jev, e.g. "${JEV_API_KEY}" (.env).
+                                # Empty: openai-decisions uses ai.api_key (provider openai)
+                                # or OPENAI_API_KEY; jev uses JEV_API_KEY
+
+prompt_extension: ""            # appended verbatim to the selected profile prompt
+
+profile: business               # business | academic | a custom id under `profiles`
+
+# Overlay a built-in (same id) or add a profile (new id, optional `extends`).
+# Keys: intro, fields, template, truncate_field, harmonize_field, direction,
+# amount, extends.
+# Overlay: scalars replace, new fields append, `field: null` deletes a field.
+# Derived fields (built-in `business`; `direction: null` / `amount: null` off):
+#   direction: {field: document_type, issuer: issuer, recipient: recipient,
+#               incoming: "{incoming_invoice}", outgoing: "{outgoing_invoice}"}
+#     AP/AR come from who issued/received the invoice vs company.name, not
+#     from the model; unclear → model's guess + warning `direction_uncertain`.
+#   amount: {field: description, amount: total_amount, currency: currency}
+#     description = output.amount_format with the printed amount + currency;
+#     no currency → warning `currency_missing`.
+#   No counterparty in the answer → warning `counterparty_missing` (review it;
+#   a name only in a logo is read when the page goes to OCR, see pdf above).
+# template = basename without .pdf; literal braces as {{ }}; truncate_field is
+# shortened first when the name exceeds the length limit.
 #   profiles:
 #     business:
-#       template: "{document_date} {company_name} {document_type}"
-#       truncate_field: company_name
-# Invoice number while keeping the printed amount: examples/invoice-id.yaml on GitHub
+#       fields:
+#         invoice_id:
+#           description: "Copy the printed invoice number exactly. Empty if absent."
+#       template: "{document_date} {company_name} {document_type} {description} {invoice_id}"
 profiles: {}
-
-# Appended verbatim to the selected profile prompt. Leave empty unless you need extra rules.
-# Do not tell the model to append amounts to document_type — that duplicates the default total.
-prompt_extension: ""

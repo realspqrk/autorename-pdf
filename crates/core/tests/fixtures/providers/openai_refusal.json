@@ -1,0 +1,1 @@
+{"id":"resp_02","object":"response","status":"completed","model":"gpt-6-luna-2026-09-01","output":[{"type":"message","id":"msg_2","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"I can't help with that."}]}],"usage":{"input_tokens":800,"output_tokens":9}}

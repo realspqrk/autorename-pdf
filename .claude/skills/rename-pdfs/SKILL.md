@@ -1,75 +1,39 @@
 ---
 name: rename-pdfs
-description: "[Dev] Rename PDF files using AI (Python, requires venv). For development and cross-platform (macOS/Linux) use."
+description: Rename PDF files from their content with AutoRename-PDF (dry-run plan, user review, apply). Uses the installed `autorename-pdf` binary, or `cargo run` in this repo. Any OS.
 user-invocable: true
 argument-hint: "[path_to_pdfs]"
 allowed-tools:
-  - Bash(python *)
-  - Bash(source *)
+  - Bash(autorename-pdf *)
+  - Bash(cargo run -q -p autorename-app *)
+  - Read
 ---
 
-# Rename PDFs (Development / Cross-Platform)
+# Rename PDFs
 
-Rename PDF files using autorename-pdf from source. Requires the Python venv to be active.
+## Pick the binary (`BIN`)
 
-## Workflow
+- Installed: `autorename-pdf` on PATH (Linux/macOS), or `autorename-pdf` (user PATH) or `"$LOCALAPPDATA/Programs/AutoRename-PDF/autorename-pdf.exe"` on Windows.
+- In this repo (dev): `cargo run -q -p autorename-app --release --` (needs `cargo xtask fetch-natives` once).
 
-0. **Activate the venv** before running any commands:
-   ```
-   source venv/Scripts/activate   # Windows
-   source venv/bin/activate       # macOS / Linux
-   ```
+Check: `BIN config validate -o json`. Exit 3 → help the user with `BIN config init` / `config path` (API key goes into `.env` beside the config as `OPENAI_API_KEY=...`; never print keys).
 
-1. **Always dry-run first** to preview changes:
-   ```
-   python autorename-pdf.py rename $ARGUMENTS --dry-run --output json
-   ```
+## Workflow (never skip the review)
 
-2. **Review the output** — check that company names, dates, and document types look correct.
+1. Plan, no changes: `BIN rename --plan "$TMPDIR/arp-plan.json" -o json $ARGUMENTS` (add `-r` for subfolders).
+2. Show the user a table from `items[]`: `source` → `proposed_name`, plus `warnings`, `error`, `company_match`/`learn` (new or review-flagged companies) and `enrich` (skipped PDFs).
+3. Only after the user confirms: `BIN apply "$TMPDIR/arp-plan.json" -o json`. No new AI calls; files changed since the plan fail with `source_changed`.
+4. Report renamed/failed counts, `enrich_status`, `learn_status`, and the batch id.
 
-3. **If the user confirms**, run without dry-run:
-   ```
-   python autorename-pdf.py rename $ARGUMENTS --output json
-   ```
+## Options (on `rename`)
 
-4. **Report results** — show renamed count, any failures, and new filenames.
+`--profile business|academic|<id>` · `--provider openai|anthropic|gemini|xai|ollama` · `--model <id>` · `--ocr[=auto|on|off]` · `--vision[=auto|on|off]` (always with `=`) · `--no-enrich` · `--no-learn` · `--offline` (global: local Ollama only) · `-j N`.
 
-## Options
+## Undo and companies
 
-Pass these after the path:
-- `--recursive` or `-r` — process subfolders
-- `--provider <name>` — override AI provider (openai/anthropic/gemini/xai/ollama)
-- `--model <name>` — override AI model
-- `--vision` — force vision mode (send page images to LLM)
-- `--text-only` — text extraction only, no OCR/vision
-- `--ocr` — force PaddleOCR
+- `BIN undo -o json` (last batch), `BIN undo --list -o json`, `BIN undo --batch <id>`.
+- Wrong canonical company: `BIN names list -o json`, `names merge FROM INTO`, `names add NAME --alias X`, `names review --accept NAME` (add `--field <id>` for non-business profiles).
 
-## Undo
+## Exit codes
 
-```
-python autorename-pdf.py undo --output json
-```
-
-## Config
-
-```
-python autorename-pdf.py config show --output json
-```
-
-## Company Name Harmonization
-
-`harmonized-company-names.yaml` maps company name variations to standardized names (e.g., "MSFT", "Microsoft Corp." → "Microsoft"). Uses fuzzy matching (Jaro-Winkler) so OCR typos are handled automatically.
-
-If the dry-run output shows inconsistent or wrong company names, suggest the user add mappings:
-```yaml
-StandardName:
-  - "Variation 1"
-  - "Variation 2"
-```
-
-## Notes
-
-- Config file: `config.yaml` in project root (never commit — contains API keys)
-- Company names file: `harmonized-company-names.yaml` in project root (copy from `.example`)
-- Output format: `YYYYMMDD COMPANY DOCTYPE.pdf`
-- Providers: openai, anthropic, gemini, xai, ollama
+0 ok · 2 usage · 3 config · 4 no PDFs · 5 partial · 10 provider · 11 auth (check the key). Details: `BIN --help`.

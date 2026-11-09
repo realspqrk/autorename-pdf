@@ -1,8 +1,0 @@
-{
-  "primary": "#dc2626",
-  "secondary": "hsl(215, 16%, 47%)",
-  "success": "hsl(142, 70%, 35%)",
-  "danger": "hsl(0, 72%, 51%)",
-  "warning": "hsl(45, 100%, 51%)",
-  "info": "hsl(199, 89%, 48%)"
-}

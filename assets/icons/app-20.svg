@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 20 px small master (spec §6; same geometry as gui::theme::mark):
+     flat tile r4, 1 px #991B1B edge, 1 px page, two text lines. -->
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0.5" y="0.5" width="19" height="19" rx="3.5" fill="#DC2626" stroke="#991B1B" stroke-width="1"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="1" stroke-linejoin="miter" stroke-linecap="butt">
+    <path d="M6.5 4.5H11.5L14.5 7.5V16.5H6.5Z"/>
+    <path d="M8 10.5H13M8 13.5H13"/>
+  </g>
+</svg>

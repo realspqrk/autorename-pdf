@@ -1,24 +1,27 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python*)",
-      "Bash(python build.py)",
-      "Bash(pip install*)",
-      "Bash(pip list*)",
+      "Bash(cargo fmt --all --check*)",
+      "Bash(cargo clippy*)",
+      "Bash(cargo check*)",
+      "Bash(cargo test*)",
+      "Bash(cargo tree*)",
+      "Bash(cargo metadata*)",
+      "Bash(cargo xtask icons --check*)",
+      "Bash(cargo run -q -p autorename-app -- --help*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
-      "Bash(git add*)",
-      "Bash(git rm --cached*)",
-      "Bash(python -c*)",
+      "Bash(git show*)",
       "Bash(ls*)",
-      "Bash(mkdir*)",
       "WebSearch",
       "WebFetch(*)"
     ],
     "deny": [
       "Edit(file_path=**/config.yaml)",
-      "Write(file_path=**/config.yaml)"
+      "Write(file_path=**/config.yaml)",
+      "Edit(file_path=**/.env)",
+      "Write(file_path=**/.env)"
     ]
   }
 }

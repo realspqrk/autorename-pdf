@@ -1,0 +1,63 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  # aws-lc-sys (rustls) uses its prebuilt NASM objects on Windows.
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  test:
+    name: clippy + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch PDFium
+        run: cargo xtask fetch-natives
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # GUI snapshot/a11y tests (gui::tests) need a GPU adapter for wgpu;
+      # hosted runners have none. Run them locally (playbooks, AGENTS.md).
+      - name: Test
+        run: cargo test --workspace --locked -- --skip gui::tests
+      - name: Icons up to date
+        if: runner.os == 'Linux'
+        run: cargo xtask icons --check
+
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3,cargo-deny@0.20.2
+      - name: Licenses allowlist
+        run: cargo deny check licenses
+      - name: Third-party notices up to date
+        run: cargo xtask notices --check

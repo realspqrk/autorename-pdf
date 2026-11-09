@@ -1,0 +1,18 @@
+Page 1:
+Rechnung
+Rechnungsnummer: RE-2025-0042
+Rechnungsdatum: 08.02.2025
+Mustermann Consulting GmbH
+Musterstrasse 10, 1010 Wien
+UID: ATU98765432
+An: Petermeir Digital Solutions e.U.
+Leistungsbeschreibung Menge Preis Gesamt
+-----------------------------------------------------------------
+IT-Beratung 8 EUR 95,00 EUR 760,00
+Projektmanagement 4 EUR 85,00 EUR 340,00
+-----------------------------------------------------------------
+Netto EUR 1.100,00
+USt 20% EUR 220,00
+Brutto EUR 1.320,00
+Zahlungsziel: 08.03.2025
+IBAN: AT99 8765 4321 0987 6543

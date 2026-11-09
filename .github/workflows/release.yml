@@ -1,0 +1,123 @@
+# Builds release packages on tag push (vX.Y.Z) and attaches them to a draft
+# GitHub release. Runbook: playbooks/release.md. Validate the Windows
+# installer in a VM (playbooks/windows-vm-validation.md) before publishing.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+
+jobs:
+  version:
+    name: tag matches workspace version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check tag
+        if: github.ref_type == 'tag'
+        run: cargo xtask check-tag "${GITHUB_REF_NAME}"
+
+  licenses:
+    name: license gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3,cargo-deny@0.20.2
+      - run: cargo deny check licenses
+      - run: cargo xtask notices --check
+
+  dist:
+    needs: [version, licenses]
+    name: dist (${{ matrix.triple }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    env:
+      # Signing is on only when the Azure secrets exist (Windows).
+      SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && matrix.os == 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Gates
+        shell: bash
+        run: |
+          cargo xtask fetch-natives
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --locked -- --skip gui::tests
+
+      # --- Windows signing (Azure Trusted Signing), placeholders -------------
+      # Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET.
+      # metadata.json (endpoint, account, certificate profile) is in the repo.
+      - name: Install Azure Trusted Signing client (dlib)
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          nuget install Microsoft.Trusted.Signing.Client -OutputDirectory "$env:RUNNER_TEMP\ats" -ExcludeVersion
+          $dlib = Get-ChildItem "$env:RUNNER_TEMP\ats" -Recurse -Filter Azure.CodeSigning.Dlib.dll |
+            Where-Object FullName -like '*x64*' | Select-Object -First 1
+          "AZURE_CODE_SIGNING_DLIB=$($dlib.FullName)" >> $env:GITHUB_ENV
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object FullName -like '*x64*' | Sort-Object FullName -Descending | Select-Object -First 1
+          "SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
+
+      - name: Build packages (Linux)
+        if: runner.os == 'Linux'
+        run: cargo xtask dist
+
+      - name: Build packages (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          if ($env:SIGN -eq 'true') { cargo xtask dist --sign } else { cargo xtask dist }
+
+      - name: Name checksums per target
+        shell: bash
+        run: mv "target/dist/${{ matrix.triple }}/SHA256SUMS" "target/dist/${{ matrix.triple }}/SHA256SUMS-${{ matrix.triple }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.triple }}
+          if-no-files-found: error
+          path: |
+            target/dist/${{ matrix.triple }}/*.exe
+            target/dist/${{ matrix.triple }}/*.AppImage
+            target/dist/${{ matrix.triple }}/*.deb
+            target/dist/${{ matrix.triple }}/*.tar.gz
+            target/dist/${{ matrix.triple }}/PKGBUILD
+            target/dist/${{ matrix.triple }}/SHA256SUMS-*
+
+  publish:
+    needs: [version, dist]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --draft --generate-notes --repo "${GITHUB_REPOSITORY}"

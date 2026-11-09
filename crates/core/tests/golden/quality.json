@@ -1,0 +1,14 @@
+{
+ "_source": "4.0 per-page readability (extract::quality::page_quality), document = worst page, max_pages=3, 2026-11-08",
+ "quality": {
+  "empty": 0.0,
+  "image_invoice_springfield": 0.0,
+  "minimal_text": 1.0,
+  "mixed_invoice_initech": 1.0,
+  "multipage_invoice_stark": 1.0,
+  "text_invoice_acme": 1.0,
+  "text_letter_globex": 1.0,
+  "text_outgoing_invoice_wayne": 1.0,
+  "text_rechnung_mustermann": 1.0
+ }
+}

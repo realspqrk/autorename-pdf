@@ -1,0 +1,1 @@
+{"id":"resp_04","object":"response","status":"completed","model":"gpt-6-luna-2026-09-01","output":[{"type":"message","id":"msg_4","role":"assistant","status":"completed","content":[{"type":"output_text","annotations":[],"text":"{\"company_name\":\"ACME Corp\",\"document_date\":\"15.03.2026\""}]}],"usage":{"input_tokens":800,"output_tokens":20}}
