@@ -736,7 +736,11 @@ fn cli_link(
         && action != Action::Remove
         && !std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|x| x == d.bin))
     {
-        it.note = Some(format!("{} is not on PATH", d.bin.display()));
+        it.note = Some(format!(
+            "{} is not on PATH: add `export PATH=\"{}:$PATH\"` to your shell profile (e.g. ~/.bashrc), then open a new terminal",
+            d.bin.display(),
+            d.bin.display()
+        ));
     }
     Ok(it)
 }

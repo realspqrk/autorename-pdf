@@ -650,7 +650,26 @@ fn integrate_step(check: bool) -> Step {
                 (true, false, _) | (false, _, false) => Status::Unchanged,
                 (false, _, true) => Status::Done,
             };
-            step("integrate", status).detail(format!("{} ({} entries)", r.platform, r.items.len()))
+            // Item and platform notes (e.g. the CLI link is not on PATH)
+            // are what a first-time user needs next.
+            // File managers that are not installed are skipped silently here.
+            let mut notes: Vec<&str> = r
+                .items
+                .iter()
+                .filter(|i| i.state != State::Skipped)
+                .filter_map(|i| i.note.as_deref())
+                .chain(r.notes.iter().map(String::as_str))
+                .collect();
+            notes.dedup();
+            let s = step("integrate", status).detail(format!(
+                "{} ({} entries)",
+                r.platform,
+                r.items.len()
+            ));
+            match notes.is_empty() {
+                true => s,
+                false => s.hint(notes.join("\n")),
+            }
         }
         Err(e) => step("integrate", Status::Failed)
             .fail(e.exit_code())
@@ -678,7 +697,7 @@ fn print(r: &Report, ctx: &Ctx<'_>) {
             out.paint(&pad(word, 8), style),
             pad(s.step, 12)
         ));
-        if let Some(h) = &s.hint {
+        for h in s.hint.iter().flat_map(|h| h.lines()) {
             out.line(&format!("{}{}", " ".repeat(25), out.paint(h, Style::Dim)));
         }
     }

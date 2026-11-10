@@ -14,7 +14,7 @@ Rename PDFs from their content (AI + OCR).
 
 autorename-pdf reads each PDF, asks an AI model for the date, company,
 document type and total, and renames the file, e.g. `scan_0042.pdf` ->
-`20240315 ACME AP EUR 4,258.80.pdf`. It also stores the extracted data inside
+`20240315 ACME AP EUR 4258.80.pdf`. It also stores the extracted data inside
 the PDF and keeps company names spelled the same way. Text is read on this
 computer first (text layer, then local OCR); page images go to the model only
 when that is not enough. Every change can be reverted with `undo`.
@@ -422,7 +422,7 @@ EXAMPLES:
   autorename-pdf names list
   autorename-pdf names review                          # flagged for a look
   autorename-pdf names merge \"ACME Corp Holding\" ACME  # same company
-  autorename-pdf names rename \"ACME Corporation GmbH\" ACME  # new spelling
+  autorename-pdf names rename \"Initech Solutions\" \"Initech Corp\"  # new spelling
 
 Run `names <command> --help` for each command's options.";
 
@@ -478,7 +478,7 @@ EXAMPLES:
     /// Change an entry's canonical spelling (OLD stays as an alias)
     #[command(after_long_help = "\
 EXAMPLES:
-  autorename-pdf names rename \"ACME Corporation\" ACME
+  autorename-pdf names rename \"Initech Solutions\" \"Initech Corp\"
 
 Refuses when NEW already belongs to another entry: merge instead.")]
     Rename {

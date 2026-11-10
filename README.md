@@ -12,7 +12,7 @@
 
 Drop in invoices, letters and scans; get files named by date, company, document type and amount. AutoRename-PDF reads each PDF, asks an AI model (OpenAI, Anthropic, Gemini, xAI, or a local Ollama model) what it is, renames the file, and keeps the extracted data inside the PDF. Every change can be undone.
 
-> **4.0 is in beta.** Version 4 is a rewrite: one app with a window and a command line for Windows, macOS and Linux, plus local OCR for scans. Download **[4.0.0-beta.2](https://github.com/realspqrk/autorename-pdf/releases/tag/v4.0.0-beta.2)**; the last stable release is [3.2.0](https://github.com/realspqrk/autorename-pdf/releases/tag/v3.2.0). Coming from 3.x? Read the [migration guide](docs/migration-3-to-4.md) first. Found a problem? [Open an issue](https://github.com/realspqrk/autorename-pdf/issues).
+> **4.0 beta 2 is the current release.** Version 4 is a rewrite: one app with a window and a command line for Windows, macOS and Linux, plus local OCR for scans. Download **[4.0.0-beta.2](https://github.com/realspqrk/autorename-pdf/releases/tag/v4.0.0-beta.2)**. Coming from 3.x? Read the [migration guide](docs/migration-3-to-4.md) first: 3.x settings are not read ([3.2.0](https://github.com/realspqrk/autorename-pdf/releases/tag/v3.2.0) stays available). Found a problem? [Open an issue](https://github.com/realspqrk/autorename-pdf/issues).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/gui-preview-dark.png">
@@ -27,7 +27,7 @@ Download from the [4.0.0-beta.2 release](https://github.com/realspqrk/autorename
 |---|---|---|
 | Windows 10/11 (x64) | `AutoRename-PDF_4.0.0-beta.2_x64-setup.exe` | Double-click it; no admin rights needed. Then open AutoRename-PDF from the Start menu. |
 | macOS 11+ (Apple silicon) | `AutoRename-PDF_4.0.0-beta.2_aarch64.dmg` | Open it and drag AutoRename-PDF into Applications. Signed and notarized by Apple. |
-| Linux (x86_64, any distro) | `autorename-pdf_4.0.0-beta.2_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
+| Linux (x86_64, glibc 2.38+) | `autorename-pdf_4.0.0-beta.2_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
 | Ubuntu 24.04+ / Debian 13+ | `autorename-pdf_4.0.0.beta.2_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
 | Arch / Omarchy | `autorename-pdf_4.0.0beta.2_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
 
@@ -115,9 +115,10 @@ Any PDF tool can read the attachment too (qpdf, pdfdetach: [examples](docs/guide
 The app remembers each company the first time you rename a PDF from it and reuses that spelling. In the Name matching tab: if the same company appears twice, select the spelling you don't want, choose **Merge into**, and pick the name to keep. To change one company's spelling, choose **Rename**. Existing file names stay as they are; future documents use the new name. On the command line ([full walkthrough](docs/guide.md#name-matching)):
 
 ```console
-$ autorename-pdf names rename "ACME Corporation" ACME
-$ autorename-pdf rename --dry-run demo/acme-invoice.pdf     # a fresh copy of the demo file
-  acme-invoice.pdf  →  20240315 ACME AP EUR 4,258.80.pdf
+$ autorename-pdf names list                                  # the saved spellings
+$ autorename-pdf names rename "Initech Solutions" "Initech Corp"
+$ autorename-pdf rename --dry-run demo/initech-invoice.pdf  # a fresh copy of the demo file
+  initech-invoice.pdf  →  20240628 Initech Corp AP EUR 237.50.pdf
 ```
 
 `names review` lists names the app was unsure about; `names merge` joins two entries. How matching works: [docs/guide.md](docs/guide.md#name-matching).
@@ -126,7 +127,7 @@ $ autorename-pdf rename --dry-run demo/acme-invoice.pdf     # a fresh copy of th
 
 | Profile | Example file name |
 |---|---|
-| `business` (default) | `20240315 ACME AP EUR 4,258.80.pdf`: date, company, AP/AR (bill received / invoice sent), total |
+| `business` (default) | `20240315 ACME AP EUR 4258.80.pdf`: date, company, AP/AR (bill received / invoice sent), total |
 | `academic` | `20260101 Smith Nature Attention Is All You Need.pdf`: date, first author, venue, title |
 | your own | any fields and template under `profiles:` in the config |
 

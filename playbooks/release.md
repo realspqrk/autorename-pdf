@@ -11,7 +11,7 @@
 ## 1. Version bump
 - Edit `[workspace.package] version` in `Cargo.toml` (one place: every crate, the exe VERSIONINFO, and cargo-packager read it).
 - `cargo check --workspace` to refresh `Cargo.lock`; the Settings > About snapshots show the version: `UPDATE_SNAPSHOTS=1 cargo test -p autorename-app --bin autorename-pdf gui::tests::snapshots`. Then commit as `Bump version to X.Y.Z`.
-- Pre-release: `X.Y.Z-beta.N` (semver), tag `vX.Y.Z-beta.N`. CI marks a tag with `-` as GitHub pre-release (never "Latest"). Package versions are mapped per format so the final release sorts after the beta (`dist.rs::format_version`): deb `X.Y.Z~beta.N`, pacman `X.Y.Zbeta.N`; NSIS/VERSIONINFO use `X.Y.Z.0`. While a beta is out, the README install table and AGENTS.md runbook name the beta tag (`gh release download` without a tag fetches the latest stable).
+- Pre-release: `X.Y.Z-beta.N` (semver), tag `vX.Y.Z-beta.N`. CI marks a tag with `-` as GitHub pre-release. To make a beta the default download (4.0.0-beta.2 onward, the user's call), publish with `gh release edit vX.Y.Z-beta.N --draft=false --prerelease=false --latest`. Package versions are mapped per format so the final release sorts after the beta (`dist.rs::format_version`): deb `X.Y.Z~beta.N`, pacman `X.Y.Zbeta.N`; NSIS/VERSIONINFO use `X.Y.Z.0`. While a beta is out, the README install table and AGENTS.md runbook name the beta tag (`gh release download` without a tag fetches the latest stable).
 
 ## 2. Gates
 ```bash
