@@ -274,12 +274,22 @@ fn fields(ui: &mut Ui, item: &autorename_core::pipeline::PlanItem, w: f32) {
             ));
         }
     }
+    // Label column (§4.4): at least LABEL_COL, wider when a label needs it,
+    // always with a gap before the value; at most half a column.
+    let tw = |s: &str, t| crate::gui::components::text_width(ui, s, t);
+    let widest = pairs
+        .iter()
+        .map(|(k, _)| tw(k, typ::CAPTION))
+        .fold(0.0, f32::max);
+    let label_col = (widest + space::MD).max(size::LABEL_COL).ceil();
     // Two columns (§4.4) when every value fits, else one full-width column.
     let col2 = ((w - space::LG) / 2.0).floor();
-    let fits = pairs.iter().all(|(_, v)| {
-        crate::gui::components::text_width(ui, v, typ::BODY) <= col2 - size::LABEL_COL
-    });
+    let fits = label_col <= col2 / 2.0
+        && pairs
+            .iter()
+            .all(|(_, v)| tw(v, typ::BODY) <= col2 - label_col);
     let (per_row, col) = if fits { (2, col2) } else { (1, w) };
+    let label_col = label_col.min((col / 2.0).floor());
     for (k_row, chunk) in pairs.chunks(per_row).enumerate() {
         if k_row > 0 {
             ui.add_space(space::SM);
@@ -290,12 +300,13 @@ fn fields(ui: &mut Ui, item: &autorename_core::pipeline::PlanItem, w: f32) {
                 egui::pos2(line.left() + n as f32 * (col + space::LG), line.top()),
                 theme::v2(col, typ::BODY.line),
             );
-            paint_text(ui, r.left(), r.center().y, k, typ::CAPTION, p.text_muted);
+            let k = ellipsize_end(ui, k, typ::CAPTION, label_col - space::MD);
+            paint_text(ui, r.left(), r.center().y, &k, typ::CAPTION, p.text_muted);
             let v = if v.is_empty() { "—" } else { v.as_str() };
-            let v = ellipsize_end(ui, v, typ::BODY, col - size::LABEL_COL);
+            let v = ellipsize_end(ui, v, typ::BODY, col - label_col);
             paint_text(
                 ui,
-                r.left() + size::LABEL_COL,
+                r.left() + label_col,
                 r.center().y,
                 &v,
                 typ::BODY,

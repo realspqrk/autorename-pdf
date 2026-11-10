@@ -46,8 +46,14 @@ fn new_entry(n: &str, review: bool) -> Option<LearnAction> {
     })
 }
 
+/// Business-profile answer; invoices also carry `total_amount`, as the real
+/// model returns it (the details grid's longest label, "Total amount").
 fn f(date: &str, company: &str, ty: &str, desc: &str) -> Value {
-    json!({"document_date": date, "company_name": company, "document_type": ty, "description": desc})
+    let mut v = json!({"document_date": date, "company_name": company, "document_type": ty, "description": desc});
+    if ty == "AP" || ty == "AR" {
+        v["total_amount"] = desc.into();
+    }
+    v
 }
 
 fn specs() -> Vec<Spec> {
