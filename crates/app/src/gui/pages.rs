@@ -809,6 +809,8 @@ pub struct HistoryState {
     pub error: Option<String>,
     /// What to do about `error` (core's hint, e.g. move a corrupt journal aside).
     pub error_hint: Option<String>,
+    /// The journal file `error` is about (History's Open folder / Copy path).
+    pub path: Option<std::path::PathBuf>,
 }
 
 impl HistoryState {
@@ -864,6 +866,7 @@ impl HistoryState {
                 loaded: true,
                 error: Some(e.to_string()),
                 error_hint: e.hint().map(str::to_string),
+                path: Some(path),
                 ..Default::default()
             },
         }

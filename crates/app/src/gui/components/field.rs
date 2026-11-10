@@ -244,7 +244,9 @@ impl<'a> Field<'a> {
             );
         } else if let Some(h) = self.helper {
             ui.add_space(space::XS - ui.spacing().item_spacing.y);
-            label(ui, h, theme::typ::CAPTION, p.text_muted);
+            // Wraps at the column (and prose) width: a long helper never
+            // widens the column.
+            super::paragraph(ui, h, theme::typ::CAPTION, p.text_muted);
         }
         FieldResponse { edit }
     }

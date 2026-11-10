@@ -591,15 +591,18 @@ fn key_line(ui: &mut Ui, state: &KeyState, owner: &str, service: &str) {
 pub fn ocr_status(mode: usize, models: bool, vision_on: bool, downloading: bool) -> (Tone, String) {
     if downloading && !models {
         let then = if vision_on {
-            "scans go to AI vision until done"
+            "until it's ready, the AI reads scans from page images"
         } else {
-            "scans are skipped until done"
+            "scans are skipped until it's ready"
         };
         return match mode {
-            0 => (Tone::Accent, format!("Auto · downloading models — {then}")),
+            0 => (
+                Tone::Accent,
+                format!("Auto · downloading the scan reader; {then}"),
+            ),
             1 => (
                 Tone::Warning,
-                "On · downloading models — scans fail until done".into(),
+                "On · downloading the scan reader; scans fail until it's ready".into(),
             ),
             _ => (
                 Tone::Neutral,
@@ -614,11 +617,11 @@ pub fn ocr_status(mode: usize, models: bool, vision_on: bool, downloading: bool)
         ),
         (0, false) if vision_on => (
             Tone::Warning,
-            "Auto · models not installed — scans go to AI vision".into(),
+            "Auto · scan reader not installed; the AI reads scans from page images".into(),
         ),
         (0, false) => (
             Tone::Warning,
-            "Auto · models not installed — scans are skipped".into(),
+            "Auto · scan reader not installed; scans are skipped".into(),
         ),
         (1, true) => (
             Tone::Success,
@@ -626,7 +629,7 @@ pub fn ocr_status(mode: usize, models: bool, vision_on: bool, downloading: bool)
         ),
         (1, false) => (
             Tone::Danger,
-            "On · models missing — scans will fail until you download them".into(),
+            "On · scan reader not installed; scans fail until you download it".into(),
         ),
         _ => (
             Tone::Neutral,
@@ -658,7 +661,7 @@ pub fn scans_unreadable(ocr_mode: usize, models: bool, vision_mode: usize) -> bo
     !ocr_ok && vision_mode == 2
 }
 
-fn route_step(ui: &mut Ui, n: usize, title: &str, status: (Tone, String)) {
+fn route_step(ui: &mut Ui, n: usize, title: &str, status: (Tone, String)) -> egui::Response {
     let p = theme::palette(ui);
     let w = ui.available_width();
     let (r, _) = ui.allocate_exact_size(theme::v2(w, typ::BODY.line), Sense::hover());
@@ -678,13 +681,11 @@ fn route_step(ui: &mut Ui, n: usize, title: &str, status: (Tone, String)) {
         typ::BODY_STRONG,
         p.text,
     );
-    step_body(ui, |ui| {
-        status_line(ui, status.0, &status.1);
-    });
+    step_body(ui, |ui| status_line(ui, status.0, &status.1))
 }
 
 /// Indent a route step's body to the step title (badge 20 + gap 8).
-fn step_body(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
+fn step_body<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
     egui::Frame::NONE
         .inner_margin(egui::Margin {
             left: (size::BADGE + space::SM) as i8,
@@ -693,7 +694,8 @@ fn step_body(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = theme::v2(space::SM, 0.0);
             f(ui)
-        });
+        })
+        .inner
 }
 
 /// OCR language name for an `ocr.language` code ("de" → "German").
@@ -927,7 +929,8 @@ fn reading(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
         2,
         "Read scans on this computer",
         ocr_status(f.ocr, models, f.vision != 2, downloading),
-    );
+    )
+    .on_hover_text("Scan reader: PaddleOCR PP-OCRv6 text recognition models.");
     // Local reading does not make a cloud setup private: say where the
     // text goes next.
     let ocr_help = if f.offline {
@@ -1500,6 +1503,8 @@ pub fn sample_name(_id: &str, prof: &Profile, f: &SettingsForm) -> String {
             "first_author_surname" => "Vaswani".into(),
             "journal_name" => "NeurIPS".into(),
             "title" => "Attention Is All You Need".into(),
+            // Id/number-like fields get a realistic sample, not their label.
+            other if id_like(other) => "INV-1042".into(),
             other => crate::gui::model::field_title(other),
         }
     };
@@ -1524,6 +1529,15 @@ pub fn sample_name(_id: &str, prof: &Profile, f: &SettingsForm) -> String {
     autorename_core::naming::render_filename(prof, &fields, &f.date_format)
 }
 
+/// `invoice_id`, `order_number`, `receipt_no`, …: an identifier field.
+fn id_like(field: &str) -> bool {
+    let f = field.to_ascii_lowercase();
+    ["_id", "_number", "_no", "_nr"]
+        .iter()
+        .any(|suf| f.ends_with(suf))
+        || matches!(f.as_str(), "id" | "number" | "no")
+}
+
 fn company_group(ui: &mut Ui, m: &mut Model) {
     let f = &mut m.settings.form;
     group(
@@ -1533,10 +1547,8 @@ fn company_group(ui: &mut Ui, m: &mut Model) {
     );
     Field::new("Your company names", &mut f.company)
         .label("Your company names")
-        .hint("e.g. ACME GmbH")
-        .helper(Some(
-            "One per line, as printed on invoices: company, trading or old names, your own name. Never used as the other party in a name.",
-        ))
+        .hint("e.g. Northwind Traders Ltd")
+        .helper(Some("One per line: company, trading names, your own name."))
         .multiline(3)
         .width(theme::TEXT_EDIT_W)
         .show(ui);
@@ -1594,7 +1606,7 @@ fn codes(ui: &mut Ui, m: &mut Model) {
                 .label("Code for bills you receive")
                 .mono()
                 .error(e_in.as_deref())
-                .helper(Some("e.g. AP, or ER in German"))
+                .helper(Some("e.g. AP"))
                 .width(col)
                 .show(ui);
         });
@@ -1779,7 +1791,7 @@ pub fn decider_explanation(id: &str, offline: bool) -> &'static str {
         "ai" => "Your AI provider picks the right entry among close matches.",
         "openai-decisions" => "OpenAI Decisions picks; only the name and candidates are sent.",
         "jev" => "Jev picks; only the name and candidates are sent.",
-        _ => "Close matches become new entries marked for review.",
+        _ => "Close matches become new entries that need a look.",
     }
 }
 

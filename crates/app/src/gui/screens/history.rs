@@ -12,6 +12,9 @@ use crate::gui::model::Model;
 use crate::gui::pages::short_time;
 use crate::gui::theme::{self, Tone, size, space, stroke, typ};
 
+/// What moving a corrupt undo journal aside does (History error state).
+pub const RESET_COPY: &str = "To start a new history, rename journal.json (for example to journal.json.bak) or move it out of its folder. The runs recorded in it can then no longer be undone.";
+
 pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
     let p = theme::palette(ui);
     ui.painter().rect_filled(body, 0, p.bg);
@@ -53,9 +56,37 @@ pub fn history(ui: &mut Ui, body: Rect, m: &Model, acts: &mut Vec<Action>) {
                 p.danger,
             );
             ui.add_space(space::SM);
-            if let Some(hint) = &h.error_hint {
-                paragraph(ui, hint, typ::BODY, p.text);
-                ui.add_space(space::SM);
+            // Core's hint means the file is corrupt: say in plain words what
+            // moving it aside does (never automatic).
+            if h.error_hint.is_some() {
+                paragraph(ui, RESET_COPY, typ::BODY, p.text);
+                ui.add_space(space::LG);
+            }
+            if let Some(path) = &h.path {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = space::SM;
+                    if Button::secondary("Open folder")
+                        .icon(theme::icon::FOLDER_OPEN)
+                        .tooltip("Opens the folder that holds journal.json")
+                        .show(ui)
+                        .clicked()
+                    {
+                        let dir = path.parent().unwrap_or(path).to_path_buf();
+                        acts.push(Action::OpenPath(dir));
+                    }
+                    if Button::secondary("Copy path")
+                        .icon(theme::icon::COPY)
+                        .tooltip(path.display().to_string())
+                        .show(ui)
+                        .clicked()
+                    {
+                        acts.push(Action::CopyText(
+                            path.display().to_string(),
+                            "Copied the path of journal.json",
+                        ));
+                    }
+                });
+                ui.add_space(space::LG);
             }
             paragraph(ui, e, typ::CAPTION, p.text_muted);
         });

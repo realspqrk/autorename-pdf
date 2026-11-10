@@ -77,7 +77,7 @@ pub(crate) fn failure_banner(
 }
 pub const CANCELLED: &str = "Download cancelled";
 /// Offline mode refuses model downloads (CLI parity).
-pub const DOWNLOAD_BLOCKED: &str = "Offline mode doesn't download models. Use Import from folder… with files copied from another computer.";
+pub const DOWNLOAD_BLOCKED: &str = "Offline mode doesn't download the scan reader. Use Import from folder… with files copied from another computer.";
 const STORE_DETAIL_VISIBLE: &str = "detail_visible";
 
 impl App {
@@ -1281,9 +1281,9 @@ impl App {
                     r.dont_learn = !r.dont_learn;
                 }
             }
-            Action::CopyText(t) => {
+            Action::CopyText(t, toast) => {
                 ctx.copy_text(t);
-                self.toast(ctx, "Copied the original path");
+                self.toast(ctx, toast);
             }
             Action::TestSetup => match self.setup_settings() {
                 Ok(st) if !self.m.demo => {
@@ -1983,6 +1983,10 @@ impl App {
     fn save_setup(&mut self) {
         if self.m.demo {
             self.m.config = super::demo::config();
+            return;
+        }
+        // The card disables Save while a key is missing (it shows why).
+        if self.m.setup_blocker().is_some() {
             return;
         }
         let s = self.m.setup.clone();

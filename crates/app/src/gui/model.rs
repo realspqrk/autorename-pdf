@@ -714,6 +714,21 @@ pub fn provider_label(id: &str) -> &str {
 }
 
 impl Model {
+    /// Why the first-run card can't save or test yet (Settings' key rule):
+    /// a cloud provider needs a typed key or one found on this computer
+    /// (environment or an existing `.env`); Ollama needs none.
+    pub fn setup_blocker(&self) -> Option<String> {
+        if self.setup.offline || !self.setup.api_key.trim().is_empty() {
+            return None;
+        }
+        let (id, name) = PROVIDERS[self.setup.provider.min(3)];
+        let var = key_var(id);
+        if var.is_empty() || !matches!(self.config.env_source(var), KeySource::Missing(_)) {
+            return None;
+        }
+        Some(format!("Add your {name} API key to continue."))
+    }
+
     pub fn new(config: ConfigState) -> Self {
         // Setup card pre-fill from an existing config.
         let company = config
@@ -1269,7 +1284,7 @@ impl MatchView {
                 )
             }
             MatchOutcome::Review => format!(
-                "\u{201c}{raw}\u{201d} is close to known {many} · new entry \u{201c}{can}\u{201d} needs review"
+                "\u{201c}{raw}\u{201d} is close to known {many} · new entry \u{201c}{can}\u{201d} needs a look"
             ),
         }
     }
@@ -1284,10 +1299,10 @@ impl MatchView {
         let why = match (band, self.outcome) {
             (">=0.92", _) => "≥ 0.92: added as an alias automatically".to_string(),
             (_, MatchOutcome::Review) if self.decided_by == DecidedBy::None => {
-                "below 0.92 with the decider off: new entry flagged for review".into()
+                "below 0.92 with the decider off: the new entry needs a look".into()
             }
             (_, MatchOutcome::Review) => {
-                "the decider gave no verdict: new entry flagged for review".into()
+                "the decider gave no verdict: the new entry needs a look".into()
             }
             ("0.75-0.92", MatchOutcome::New) => format!(
                 "between 0.75 and 0.92: {} chose a new entry",
@@ -1372,7 +1387,7 @@ pub fn row_a11y(r: &Row) -> String {
                 });
             }
             if s == RowStatus::Review {
-                parts.push("needs review".into());
+                parts.push("needs a look".into());
             }
             if r.edited.is_some() {
                 parts.push("name edited".into());

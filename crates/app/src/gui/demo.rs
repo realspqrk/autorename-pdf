@@ -778,6 +778,7 @@ pub fn history_error_model() -> Model {
             "Move {path} aside (e.g. rename it to journal.json.bak) to start a new history; \
              the runs recorded in it can then no longer be undone."
         )),
+        path: Some(path.into()),
         ..Default::default()
     };
     m
