@@ -81,6 +81,7 @@ Toolchain via mise: prefix `PATH=$HOME/.local/share/mise/shims:$PATH` when `carg
 | OCR accuracy test | `AUTORENAME_MODELS_DIR=<root with latin/> cargo test -p autorename-core --features ocr --test extract ocr_` |
 | Live providers | `AUTORENAME_LIVE=1 cargo test -p autorename-core --test providers_live -- --ignored --nocapture` (keys from `.env`) |
 | Icons | `cargo xtask icons [--check]` |
+| Leak gate (secrets, real-document data) | `cargo xtask leakcheck [--range a..b] [--file notes.md]` (pre-push hook: `git config core.hooksPath .githooks`; extra private terms in git-ignored `.todo/sensitive.txt`) |
 | Third-party notices | `cargo xtask notices [--check]` (needs cargo-about 0.9.3; allowlist in `about.toml` + `deny.toml`; manual entries in `assets/licenses/`) |
 | Packages | `cargo xtask dist [--target <triple>] [--sign]` (see `playbooks/release.md`) |
 | Windows cross-check | `AWS_LC_SYS_PREBUILT_NASM=1 CARGO_TARGET_DIR=target/xwin cargo xwin clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` |
@@ -91,6 +92,7 @@ Machine output: `--output json`. Exit codes: 0 ok, 1 error, 2 usage, 3 config, 4
 
 - **No backward compatibility.** Never read or emit 3.x config, flags, logs or file formats. Users get `docs/migration-3-to-4.md`.
 - Never commit `config.yaml`, `.env` or `name-lists/*.yaml` (user name lists). Only the `.example` files.
+- Nothing from the real test PDFs (`.todo/`) goes into commits, follow-ups, tests, docs or release notes: use fictional values. `cargo xtask leakcheck` must pass before every push and publish (it also scans the release notes via `--file`).
 - Core is functional: plain functions over data structs/enums; no trait-object service layers.
 - File mutations only through `core::fsx` (no `File::create` temp files, no `exists()` + `rename`). Name-list writes only via `harmonize::update_db`; journal edits via `batch_mut`/`undo`.
 - PDFium only inside `extract::pdfium::with_pdfium` (one global mutex; PDFium is not thread-safe).

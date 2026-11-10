@@ -7298,6 +7298,7 @@ dependencies = [
  "flate2",
  "icns",
  "ico",
+ "regex",
  "reqwest",
  "resvg",
  "serde_json",

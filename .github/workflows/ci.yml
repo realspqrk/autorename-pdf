@@ -61,3 +61,20 @@ jobs:
         run: cargo deny check licenses
       - name: Third-party notices up to date
         run: cargo xtask notices --check
+
+  # Release gate (secrets part; the real-document detectors need the local
+  # `.todo/` folder and run in the pre-push hook / release playbook).
+  leakcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: No secrets in the pushed commits
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then BASE=HEAD~1; fi
+          cargo xtask leakcheck --range "$BASE..HEAD"

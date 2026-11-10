@@ -10,6 +10,7 @@
 
 mod dist;
 mod icons;
+mod leakcheck;
 mod natives;
 mod notices;
 mod sign;
@@ -24,6 +25,7 @@ fn usage() -> ExitCode {
     eprintln!("  notices [--check]");
     eprintln!("  sign <file>...");
     eprintln!("  check-tag <tag>   (release tag must be v<workspace version>)");
+    eprintln!("  leakcheck [--range <a>..<b>] [--file <path>]...   (secrets / real-document data)");
     eprintln!(
         "targets: {}",
         natives::PDFIUM
@@ -91,6 +93,10 @@ fn main() -> ExitCode {
         },
         Some("sign") if !rest.is_empty() => report(sign::run(rest)),
         Some("check-tag") if rest.len() == 1 => report(dist::check_tag_cmd(&rest[0])),
+        Some("leakcheck") => match leakcheck::Opts::parse(rest) {
+            Some(o) => report(leakcheck::run(&natives::workspace_root(), &o)),
+            None => usage(),
+        },
         _ => usage(),
     }
 }
