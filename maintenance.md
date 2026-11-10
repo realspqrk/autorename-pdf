@@ -7,6 +7,7 @@ The 4.0 cleanup removed every tracked 3.x file (Python, Tauri GUI, scripts) and 
 - [2. App data from dev and test runs](#2-app-data-from-dev-and-test-runs)
 - [3. Build caches](#3-build-caches)
 - [4. Old 3.x installs (Windows)](#4-old-3x-installs-windows)
+- [5. After the 2026-11-10 history rewrite](#5-after-the-2026-11-10-history-rewrite)
 
 ## 1. 3.x leftovers in the checkout
 
@@ -68,3 +69,15 @@ rm -rf ~/.cache/dfbin ~/.cache/cargo-xwin
 3. Delete the portable `AutoRename-PDF-Portable-*` folder (it held the 3.x `config.yaml`, EXEs and logs).
 
 On Linux/macOS the 3.x OCR venv was `~/.local/share/autorename-pdf/paddleocr-venv/` (not present on this machine): `rm -rf ~/.local/share/autorename-pdf/paddleocr-venv`.
+
+## 5. After the 2026-11-10 history rewrite
+
+Real-document details (a customer name, one invoice number and amount, a document title) were removed from the 16 commits after `0841ab7` with `git filter-repo` and force-pushed (`main`, tag `v4.0.0-beta.2`). Old copies still exist:
+
+| Where | What | Action |
+|---|---|---|
+| GitHub `refs/pull/25/head` (`cb3e591`) and cached views | old commits, reachable from PR #25 | Ask GitHub Support to purge them: https://support.github.com/contact, "Remove cached views / sensitive data", repo `realspqrk/autorename-pdf`, PR #25, old SHA `cb3e591`. |
+| `~/.cache/arp-backup/pre-rewrite-*.bundle` (~217 MB) | full pre-rewrite backup | Delete once the rewritten history looks right: `rm -rf ~/.cache/arp-backup`. |
+| `~/Windows/arp.bundle` and the VM checkout `C:\src\arp` | old branch commits | Local only. Next VM build: `git fetch` the new bundle and `git reset --hard`; delete the old bundle: `rm ~/Windows/arp.bundle`. |
+| Other clones (Mac `~/Code/autorename-pdf` if it fetched) | old history | `git fetch origin && git reset --hard origin/main && git tag -d v4.0.0-beta.2 && git fetch --tags`. |
+
