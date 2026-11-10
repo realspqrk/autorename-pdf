@@ -705,6 +705,20 @@ fn str_at<'a>(config: &'a Value, section: &str, key: &str) -> &'a str {
         .unwrap_or("")
 }
 
+/// Keys renamed during the 4.0 betas: (old key, hint naming the new one).
+const RENAMED: [(&str, &str); 1] = [(
+    "company.name",
+    "company.names takes a list of your names, e.g. names: [\"Spqrk GmbH\", \"Jane Doe\"].",
+)];
+
+fn unknown_key(field: &str) -> Issue {
+    let issue = Issue::error(field, format!("unknown key {field:?}"));
+    match RENAMED.iter().find(|(old, _)| *old == field) {
+        Some((_, hint)) => issue.hint(*hint),
+        None => issue,
+    }
+}
+
 /// Schema check: unknown keys, section shapes, value types.
 fn check_schema(config: &Value, issues: &mut Vec<Issue>) -> bool {
     let Some(root) = config.as_object() else {
@@ -728,7 +742,7 @@ fn check_schema(config: &Value, issues: &mut Vec<Issue>) -> bool {
                 let field = format!("{key}.{k}");
                 match keys.iter().find(|(name, _)| name == k) {
                     Some((_, kind)) => issues.extend(check_kind(&field, *kind, v)),
-                    None => issues.push(Issue::error(&field, format!("unknown key {:?}", field))),
+                    None => issues.push(unknown_key(&field)),
                 }
             }
         } else if key != "profiles" {
@@ -1717,6 +1731,11 @@ mod tests {
         );
         let v = validate(&with(valid_base(), json!({"pdf": {"ocrr": true}})), None);
         assert_eq!(v.issues[0].message, "unknown key \"pdf.ocrr\"");
+        let v = validate(
+            &with(valid_base(), json!({"company": {"name": "Acme"}})),
+            None,
+        );
+        assert!(v.issues[0].hint.as_deref().unwrap().contains("company.names"));
     }
 
     #[test]
