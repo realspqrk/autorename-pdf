@@ -40,7 +40,7 @@ ocr:
   language: en
   threads: 4
 company:
-  name: Example GmbH
+  names: [Example GmbH]
 output:
   language: English
   date_format: "%Y%m%d"
@@ -72,23 +72,13 @@ fn full_config_validates_and_renders() {
     assert_eq!(s.pdf.ocr, config::Toggle::Auto);
     let fields = json!({"document_date": "06.09.2026", "company_name": "ACME", "document_type": "AP", "description": "12,13", "invoice_id": "12345"});
     assert_eq!(
-        render_filename(
-            &s.profile_id,
-            &s.profile,
-            fields.as_object().unwrap(),
-            &s.date_format
-        ),
+        render_filename(&s.profile, fields.as_object().unwrap(), &s.date_format),
         "20260906 ACME AP 12,13 12345.pdf"
     );
     let s = config::settings(&loaded.tree, Some("academic")).unwrap();
     let fields = json!({"document_date": "01.01.2026", "first_author_surname": "Smith", "journal_name": "", "title": "Original title"});
     assert_eq!(
-        render_filename(
-            &s.profile_id,
-            &s.profile,
-            fields.as_object().unwrap(),
-            &s.date_format
-        ),
+        render_filename(&s.profile, fields.as_object().unwrap(), &s.date_format),
         "20260101 Smith Original title.pdf"
     );
 }
@@ -142,13 +132,13 @@ fn load_errors_and_empty_file() {
 #[test]
 fn env_expansion_before_profile_interpolation() {
     let dir = tempdir();
-    let src = "company: {name: ACME}\nprofiles:\n  business:\n    fields:\n      description: {description: '${PROFILE_CITY} {company}'}\n";
+    let src = "company: {names: [ACME]}\nprofiles:\n  business:\n    fields:\n      description: {description: '${PROFILE_CITY} {company}'}\n";
     let p = write(&dir, src);
     let env = |n: &str| (n == "PROFILE_CITY").then(|| "Wien".to_string());
     let loaded = load_with_env(&p, &env).unwrap();
     assert_eq!(
         select_profile(&loaded.tree, None).unwrap().1.fields["description"].description,
-        "Wien ACME"
+        "Wien \"ACME\""
     );
     // Unset var stays literal → placeholder parse fails, notice names the var.
     let loaded = load_with_env(&p, &no_env).unwrap();
@@ -166,7 +156,7 @@ fn dotenv_fills_gaps_but_never_overrides_real_env() {
     let dir = tempdir();
     let p = write(
         &dir,
-        "ai:\n  api_key: \"${ARP_TEST_KEY}\"\n  base_url: \"https://${ARP_TEST_HOST}/v1\"\ncompany:\n  name: Test Corp\n",
+        "ai:\n  api_key: \"${ARP_TEST_KEY}\"\n  base_url: \"https://${ARP_TEST_HOST}/v1\"\ncompany:\n  names: [Test Corp]\n",
     );
     write_file(
         &dir.join(".env"),
@@ -197,7 +187,7 @@ fn strict_schema_in_files() {
     // YAML 1.2: `yes`/`off` are strings → plain type errors; unknown keys are errors.
     let p = write(
         &dir,
-        "ai: {provider: ollama}\ncompany: {name: X}\npdf:\n  ocr: yes\n  vision: off\npaddleocr:\n  language: de\n",
+        "ai: {provider: ollama}\ncompany: {names: [X]}\npdf:\n  ocr: yes\n  vision: off\npaddleocr:\n  language: de\n",
     );
     let v = validate_loaded(&load_with_env(&p, &no_env).unwrap(), None);
     let errors: Vec<&str> = v
@@ -217,7 +207,7 @@ fn redacted_tree_for_show() {
     let dir = tempdir();
     let p = write(
         &dir,
-        "ai: {api_key: sk-1234567890abcdef}\ncompany: {name: X}\n",
+        "ai: {api_key: sk-1234567890abcdef}\ncompany: {names: [X]}\n",
     );
     let loaded = load_with_env(&p, &no_env).unwrap();
     assert_eq!(config::redact(&loaded.tree)["ai"]["api_key"], "sk-1...cdef");

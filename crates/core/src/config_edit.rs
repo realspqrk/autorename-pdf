@@ -25,6 +25,12 @@ pub fn quoted(v: &str) -> String {
     out
 }
 
+/// YAML flow list of [`quoted`] strings on one line: `["A", "B"]`.
+pub fn quoted_list<S: AsRef<str>>(items: &[S]) -> String {
+    let inner: Vec<String> = items.iter().map(|s| quoted(s.as_ref())).collect();
+    format!("[{}]", inner.join(", "))
+}
+
 /// One line of the text: content without its terminator, plus the
 /// terminator (`"\n"`, `"\r\n"` or `""` on a last line without one).
 #[derive(Clone, Copy)]

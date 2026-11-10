@@ -5,6 +5,8 @@ Source of truth: `autorename-pdf.py`, `_config_loader.py`, `_profiles.py`, `_ai_
 `autorename_pdf_runner.py` is only an import shim for tests (loads the hyphenated module as `autorename_pdf`).
 Line refs are `file:line`. "Quirk" = behavior a clean-room port would likely get wrong.
 
+Deliberate 4.0 divergences (beta.2, the rest of this file describes 3.x): `company.name` → `company.names` (list; prompt `{company}` = `"A", "B"`); no `Unknown` fallback for empty fields (the field and its separator are left out; an empty basename is still `Unknown.pdf`); a field value repeated at the start of the next field is left out; amounts are re-written with `output.decimal_separator` (default `.`) and no grouping; company names lose their legal form deterministically.
+
 ---
 
 ## 1. CLI

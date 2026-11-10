@@ -83,7 +83,7 @@ fn every_shipped_config_validates() {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|i| i["field"] != "company.name")
+            .filter(|i| i["field"] != "company.names")
             .collect();
         assert!(
             unexpected.is_empty(),

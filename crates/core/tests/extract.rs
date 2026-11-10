@@ -274,11 +274,12 @@ fn pictures_and_drawings_cap_the_page_score() {
     assert_eq!(scan.quality, 0.0);
 }
 
-/// The limit decides: a logo page (0.75) is read again at 0.8, not at
-/// 0.75. Without OCR models, `auto` warns and the capped page goes to
-/// vision; `vision: off` sends nothing.
+/// The limit decides: a logo page (0.75) is read again by OCR at 0.8, not
+/// at 0.75. Without OCR models, `auto` warns and the page stays text: the
+/// picture cap never sends a clean text layer to paid vision; `vision: on`
+/// does.
 #[test]
-fn capped_page_goes_to_vision_without_models() {
+fn capped_page_stays_text_without_models() {
     let dir = tempfile::tempdir().unwrap();
     let empty = tempfile::tempdir().unwrap();
     let pdf = page_pdf(
@@ -294,10 +295,9 @@ fn capped_page_goes_to_vision_without_models() {
         ..ExtractConfig::default()
     };
     let ex = extract_with(&pdf, &cfg).unwrap();
-    assert_eq!(ex.page_images.len(), 1);
-    assert!(ex.pages[0].image);
+    assert!(ex.page_images.is_empty() && !ex.pages[0].image);
     assert_eq!(ex.pages[0].quality, VISUAL_CAP);
-    assert_eq!(ex.tier, Tier::VisionNeeded);
+    assert_eq!(ex.tier, Tier::Text);
     if autorename_core::ocr::ENGINE_AVAILABLE {
         assert!(
             ex.warnings
@@ -317,16 +317,16 @@ fn capped_page_goes_to_vision_without_models() {
     .unwrap();
     assert!(at_cap.page_images.is_empty() && at_cap.warnings.is_empty());
     assert_eq!(at_cap.tier, Tier::Text);
-    let no_vision = extract_with(
+    let forced = extract_with(
         &pdf,
         &ExtractConfig {
-            vision: Toggle::Off,
+            vision: Toggle::On,
             ..cfg
         },
     )
     .unwrap();
-    assert!(no_vision.page_images.is_empty());
-    assert_eq!(no_vision.quality, VISUAL_CAP);
+    assert_eq!(forced.page_images.len(), 1);
+    assert_eq!(forced.tier, Tier::VisionNeeded);
 }
 
 #[test]

@@ -23,6 +23,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::amount;
 use crate::config::{Decider, Settings};
 use crate::extract::{self, ExtractConfig, Tier};
 use crate::harmonize::{self, Choice, NameDb};
@@ -583,7 +584,7 @@ fn harmonize_name(raw: &str, ctx: &Ctx<'_>) -> Harmonized {
     use harmonize::{Decision, Verdict};
     let s = ctx.settings;
     // My own company is never a counterparty to learn.
-    if is_my_company(raw, &s.company_name) {
+    if is_my_company(raw, &s.company_names) {
         return Harmonized {
             company: raw.trim().to_string(),
             learn: None,
@@ -596,9 +597,27 @@ fn harmonize_name(raw: &str, ctx: &Ctx<'_>) -> Harmonized {
     let mut decided_by = DecidedBy::None;
     let verdict = match &decision {
         Decision::AskDecider { name, candidates } if s.auto_learn && s.decider != Decider::Off => {
-            match providers::decide_name(candidates, name, &ctx.db.field, &ctx.decider) {
-                Ok(v) => {
-                    decided_by = match (s.decider, s.privacy) {
+            let (label, _) = harmonize::field_label(&ctx.db.field);
+            let mut answer = providers::decide_name(candidates, name, &ctx.db.field, &ctx.decider)
+                .map(|v| (v, s.decider));
+            // A failing remote decider falls back to the AI provider rather
+            // than learning the name as a new entry.
+            if let Err(e) = &answer
+                && matches!(s.decider, Decider::OpenaiDecisions | Decider::Jev)
+            {
+                warnings.push(format!(
+                    "{label} decider failed: {e}; asked the AI provider instead"
+                ));
+                let ai = providers::DeciderSettings {
+                    decider: Decider::Ai,
+                    ..ctx.decider.clone()
+                };
+                answer = providers::decide_name(candidates, name, &ctx.db.field, &ai)
+                    .map(|v| (v, Decider::Ai));
+            }
+            match answer {
+                Ok((v, by)) => {
+                    decided_by = match (by, s.privacy) {
                         (Decider::Ai, crate::config::Privacy::Offline) => DecidedBy::Offline,
                         (Decider::Ai, _) => DecidedBy::Ai,
                         (Decider::OpenaiDecisions, _) => DecidedBy::OpenaiDecisions,
@@ -608,7 +627,6 @@ fn harmonize_name(raw: &str, ctx: &Ctx<'_>) -> Harmonized {
                     v
                 }
                 Err(e) => {
-                    let (label, _) = harmonize::field_label(&ctx.db.field);
                     warnings.push(format!("{label} decider failed: {e}"));
                     None
                 }
@@ -684,28 +702,44 @@ fn assess_enrich(path: &Path, enabled: bool) -> EnrichPlan {
     }
 }
 
-/// Is `name` my company? Harmonized fuzzy match with company normalization
-/// (whatever list the profile harmonizes): same normalized form (legal
-/// suffixes, case, punctuation ignored) or a non-subset similarity of at
-/// least the auto-alias threshold.
-fn is_my_company(name: &str, company: &str) -> bool {
-    let (a, b) = (
-        harmonize::normalize_company(name),
-        harmonize::normalize_company(company),
-    );
-    !a.is_empty()
-        && !b.is_empty()
-        && (a == b || harmonize::similarity(&a, &b) >= harmonize::AUTO_ALIAS_THRESHOLD)
+/// Is `name` one of my company names (`mine`)? Company normalization (legal
+/// suffixes, case, punctuation ignored). `name` may list several parties
+/// (`Spqrk GmbH, Gerhard Petermeir`): the whole text and each part split at
+/// `,` `;` `/` or a line break count. A part matches one of my names when
+/// it normalizes the same, is a close spelling (similarity ≥
+/// [`harmonize::AUTO_ALIAS_THRESHOLD`]), or, for names of two or more words,
+/// contains all of its words in any order (`Hr. Petermeir Gerhard`).
+fn is_my_company(name: &str, mine: &[String]) -> bool {
+    let mine: Vec<String> = mine
+        .iter()
+        .map(|m| harmonize::normalize_company(m))
+        .filter(|m| !m.is_empty())
+        .collect();
+    std::iter::once(name)
+        .chain(name.split([',', ';', '/', '\n']))
+        .map(harmonize::normalize_company)
+        .filter(|p| !p.is_empty())
+        .any(|part| {
+            let words: Vec<&str> = part.split_whitespace().collect();
+            mine.iter().any(|m| {
+                part == *m
+                    || harmonize::similarity(&part, m) >= harmonize::AUTO_ALIAS_THRESHOLD
+                    || (m.split_whitespace().count() > 1
+                        && m.split_whitespace().all(|w| words.contains(&w)))
+            })
+        })
 }
 
 /// Apply a profile [`profiles::Direction`]: when the model returned the
 /// incoming or outgoing value, re-derive it from who issued / received the
-/// document. Returns a `direction_uncertain` warning when neither or both
-/// sides are my company (the model's value is kept).
+/// document (`mine` = `company.names`). A document from another issuer with
+/// no recipient printed (a receipt) is incoming. Returns a
+/// `direction_uncertain` warning when it stays unclear (the model's value is
+/// kept).
 pub fn derive_direction(
     d: &profiles::Direction,
     fields: &mut Map<String, Value>,
-    company: &str,
+    mine: &[String],
 ) -> Option<String> {
     let get = |k: &str| {
         fields
@@ -715,33 +749,36 @@ pub fn derive_direction(
             .trim()
             .to_string()
     };
-    if company.trim().is_empty() {
+    if mine.is_empty() {
         return None;
     }
+    let company = mine.join(", ");
     let current = get(&d.field);
     let (issuer, recipient) = (get(&d.issuer), get(&d.recipient));
     let (me_issuer, me_recipient) = (
-        is_my_company(&issuer, company),
-        is_my_company(&recipient, company),
+        is_my_company(&issuer, mine),
+        is_my_company(&recipient, mine),
     );
     // Counterparty: the model's answer unless it is empty or my own company;
     // then the side that is not me, without its legal form (the field asks
     // for none, issuer/recipient are as printed).
     if let Some(cp) = &d.counterparty {
         let answer = get(cp);
-        let mine = is_my_company(&answer, company);
+        let answer_mine = is_my_company(&answer, mine);
+        // Neither side is me: a letter or receipt names its issuer.
         let other = match (me_issuer, me_recipient) {
             (true, false) => Some(&recipient),
             (false, true) => Some(&issuer),
+            (false, false) if answer.is_empty() => Some(&issuer),
             _ => None,
         };
-        if answer.is_empty() || mine {
+        if answer.is_empty() || answer_mine {
             match other.filter(|o| !o.is_empty()) {
                 Some(o) => {
                     let name = harmonize::strip_legal_form(o);
                     fields.insert(cp.clone(), Value::String(name));
                 }
-                None if mine => {
+                None if answer_mine => {
                     return Some(format!(
                         "direction_uncertain: the model named {company:?} (your own company) as the counterparty and issuer/recipient do not resolve it (issuer {issuer:?}, recipient {recipient:?}); please review"
                     ));
@@ -753,9 +790,11 @@ pub fn derive_direction(
     if current != d.incoming && current != d.outgoing {
         return None;
     }
+    let receipt = !issuer.is_empty() && recipient.is_empty();
     let derived = match (me_issuer, me_recipient) {
         (false, true) => &d.incoming,
         (true, false) => &d.outgoing,
+        (false, false) if receipt => &d.incoming,
         _ => {
             return Some(format!(
                 "direction_uncertain: cannot tell whether {company:?} issued or received this document (issuer {issuer:?}, recipient {recipient:?}); kept {current:?}, please review"
@@ -768,11 +807,15 @@ pub fn derive_direction(
 
 /// Apply a profile [`profiles::Amount`]: a non-empty amount becomes
 /// `format` with `{currency}`/`{amount}` filled in (spaces collapsed), in
-/// the target field. Returns `currency_missing` when no currency was found.
+/// the target field. The amount is written with decimal mark `sep` and no
+/// grouping ([`amount::normalize`]; kept as printed when it is not one
+/// number); `€`/`£` become ISO codes. Returns `currency_missing` when no
+/// currency was found.
 pub fn derive_amount(
     a: &profiles::Amount,
     fields: &mut Map<String, Value>,
     format: &str,
+    sep: &str,
 ) -> Option<String> {
     let get = |k: &str| {
         fields
@@ -782,10 +825,15 @@ pub fn derive_amount(
             .trim()
             .to_string()
     };
-    let (amount, currency) = (get(&a.amount), get(&a.currency));
-    if amount.is_empty() {
+    let (printed, currency) = (get(&a.amount), get(&a.currency));
+    if printed.is_empty() {
         return None;
     }
+    let amount = amount::normalize(&printed, sep).unwrap_or_else(|| printed.clone());
+    let currency = match currency.as_str() {
+        "" => amount::currency_in(&printed).unwrap_or("").to_string(),
+        c => amount::currency_code(c),
+    };
     let text = format
         .replace("{currency}", &currency)
         .replace("{amount}", &amount);
@@ -803,7 +851,7 @@ type Interpreted = (Map<String, Value>, Vec<String>);
 fn interpret(value: &Value, s: &Settings) -> Result<Interpreted> {
     let mut fields = profiles::validate_metadata(&s.profile, value)?;
     let warnings = match &s.profile.direction {
-        Some(d) => derive_direction(d, &mut fields, &s.company_name)
+        Some(d) => derive_direction(d, &mut fields, &s.company_names)
             .into_iter()
             .collect(),
         None => Vec::new(),
@@ -883,18 +931,28 @@ fn analyze(path: &Path, ctx: &Ctx<'_>) -> PlanItem {
     }
     item.warnings.extend(direction_warnings);
     if let Some(a) = &s.profile.amount {
-        item.warnings
-            .extend(derive_amount(a, &mut fields, &s.amount_format));
+        item.warnings.extend(derive_amount(
+            a,
+            &mut fields,
+            &s.amount_format,
+            &s.decimal_separator,
+        ));
     }
     let mut named = fields.clone();
     if let Some(hf) = &s.profile.harmonize_field {
         let raw = fields.get(hf).and_then(Value::as_str).unwrap_or("");
+        // Company names are named without their legal form (the prompt asks
+        // for that; models sometimes keep `Limited`/`GmbH`).
+        let raw = match ctx.db.kind() {
+            harmonize::NameKind::Company => harmonize::strip_legal_form(raw),
+            harmonize::NameKind::Generic => raw.to_string(),
+        };
         let Harmonized {
             company,
             learn,
             evidence,
             warnings,
-        } = harmonize_name(raw, ctx);
+        } = harmonize_name(&raw, ctx);
         item.warnings.extend(warnings);
         item.learn = learn;
         item.company_match = evidence;
@@ -907,12 +965,7 @@ fn analyze(path: &Path, ctx: &Ctx<'_>) -> PlanItem {
         .and_then(dates::parse_date)
         .map(|d| d.format("%Y-%m-%d").to_string());
     item.fields = fields;
-    item.proposed_name = Some(naming::render_filename(
-        &s.profile_id,
-        &s.profile,
-        &named,
-        &s.date_format,
-    ));
+    item.proposed_name = Some(naming::render_filename(&s.profile, &named, &s.date_format));
     item.enrich = assess_enrich(path, s.enrich_enabled);
     item.status = PlanStatus::Rename;
     item
@@ -1915,7 +1968,7 @@ mod tests {
                     .as_object()
                     .unwrap()
                     .clone();
-            let w = derive_direction(&d, &mut f, "Spqrk");
+            let w = derive_direction(&d, &mut f, &["Spqrk".to_string()]);
             (f["document_type"].as_str().unwrap().to_string(), w)
         };
         // The model said AR, but the bill is addressed to us → AP.
@@ -1936,6 +1989,26 @@ mod tests {
         assert_eq!(run("Letter", "ACME", "Spqrk"), ("Letter".into(), None));
         // A similar but different company is not mine.
         assert!(run("AP", "Spqrk Holding International", "ACME").1.is_some());
+        // A receipt: another issuer, no recipient printed → incoming.
+        assert_eq!(run("AR", "Shell Austria GmbH", ""), ("AP".into(), None));
+    }
+
+    #[test]
+    fn any_of_my_names_matches() {
+        let mine = ["SPQRK IT-Services".to_string(), "Gerhard Petermeir".into()];
+        for printed in [
+            "SPQRK IT-Services e.U.",
+            "Gerhard Petermeir",
+            "Petermeir Gerhard",
+            "Hr. Petermeir Gerhard",
+            "ACME GmbH, Gerhard Petermeir",
+            "SPQRK IT-Services; Accounts",
+        ] {
+            assert!(is_my_company(printed, &mine), "{printed}");
+        }
+        for printed in ["Gerhard Huber", "Petermeir Bau GmbH", "IT-Services Nord", ""] {
+            assert!(!is_my_company(printed, &mine), "{printed}");
+        }
     }
 
     #[test]
@@ -1951,7 +2024,7 @@ mod tests {
         let run = |cp: &str, ty: &str, issuer: &str, recipient: &str| {
             let mut f = serde_json::json!({"company_name": cp, "document_type": ty, "issuer": issuer, "recipient": recipient})
                 .as_object().unwrap().clone();
-            let w = derive_direction(&d, &mut f, "Spqrk");
+            let w = derive_direction(&d, &mut f, &["Spqrk".to_string()]);
             (
                 f["company_name"].as_str().unwrap().to_string(),
                 f["document_type"].as_str().unwrap().to_string(),
@@ -2009,21 +2082,21 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .clone();
-            let w = derive_amount(&a, &mut f, fmt);
+            let w = derive_amount(&a, &mut f, fmt, ",");
             (f["description"].as_str().unwrap().to_string(), w)
         };
         let def = "{currency} {amount}";
         // The model's description text never decides the format.
         assert_eq!(
             run("4,258.80", "EUR", "4,258.80", def),
-            ("EUR 4,258.80".into(), None)
+            ("EUR 4258,80".into(), None)
         );
         assert_eq!(
             run("1.320,00", "EUR", "", "{amount} {currency}"),
-            ("1.320,00 EUR".into(), None)
+            ("1320,00 EUR".into(), None)
         );
         let (d, w) = run("4,258.80", "", "", def);
-        assert_eq!(d, "4,258.80");
+        assert_eq!(d, "4258,80");
         assert!(w.unwrap().starts_with("currency_missing"));
         // No amount (letters, contracts): description untouched.
         assert_eq!(

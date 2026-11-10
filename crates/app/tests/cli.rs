@@ -12,7 +12,7 @@ use std::sync::Arc;
 use assert_cmd::Command;
 use serde_json::Value;
 
-const ACME_REPLY: &str = r#"{"model":"gemma4","created_at":"2026-11-07T10:00:00Z","message":{"role":"assistant","content":"{\"company_name\":\"ACME Corp\",\"issuer\":\"ACME Corp\",\"recipient\":\"Test Company GmbH\",\"document_date\":\"15.03.2026\",\"document_type\":\"AP\",\"total_amount\":\"1,234.56\",\"currency\":\"\",\"description\":\"1,234.56\"}"},"done":true,"done_reason":"stop","prompt_eval_count":760,"eval_count":48}"#;
+const ACME_REPLY: &str = r#"{"model":"gemma4","created_at":"2026-11-07T10:00:00Z","message":{"role":"assistant","content":"{\"company_name\":\"ACME Works\",\"issuer\":\"ACME Works\",\"recipient\":\"Test Company GmbH\",\"document_date\":\"15.03.2026\",\"document_type\":\"AP\",\"total_amount\":\"1,234.56\",\"currency\":\"\",\"description\":\"1,234.56\"}"},"done":true,"done_reason":"stop","prompt_eval_count":760,"eval_count":48}"#;
 const OPENAI_401: &str = r#"{"error":{"message":"Incorrect API key provided: sk-bad.","type":"invalid_request_error","param":null,"code":"invalid_api_key"}}"#;
 
 type Responder = Arc<dyn Fn(&str) -> (u16, String) + Send + Sync>;
@@ -106,7 +106,7 @@ impl Env {
 
     fn ollama(url: &str) -> Env {
         Env::new(&format!(
-            "config_version: 4\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{url}\"\n  max_retries: 0\ncompany:\n  name: Test Company\n"
+            "config_version: 4\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{url}\"\n  max_retries: 0\ncompany:\n  names: [Test Company]\n"
         ))
     }
 
@@ -188,13 +188,13 @@ fn dry_run_json_shape() {
     assert_eq!(
         names,
         [
-            "20260315 ACME Corp AP 1,234.56.pdf",
-            "20260315 ACME Corp AP 1,234.56_(1).pdf"
+            "20260315 ACME Works AP 1234.56.pdf",
+            "20260315 ACME Works AP 1234.56_(1).pdf"
         ]
     );
     for i in items {
         assert_eq!(i["status"], "rename");
-        assert_eq!(i["company"], "ACME Corp");
+        assert_eq!(i["company"], "ACME Works");
         assert_eq!(i["date"], "2026-03-15");
         assert_eq!(i["tier"], "text");
         assert_eq!(i["fields"]["document_type"], "AP");
@@ -204,7 +204,7 @@ fn dry_run_json_shape() {
     }
     assert_eq!(
         items[0]["learn"],
-        serde_json::json!({"action": "new_entry", "name": "ACME Corp", "review": false})
+        serde_json::json!({"action": "new_entry", "name": "ACME Works", "review": false})
     );
     let m = &items[0]["company_match"];
     assert_eq!(
@@ -213,9 +213,9 @@ fn dry_run_json_shape() {
             m["outcome"].as_str(),
             m["decided_by"].as_str()
         ),
-        (Some("ACME Corp"), Some("new"), Some("none"))
+        (Some("ACME Works"), Some("new"), Some("none"))
     );
-    assert_eq!(m["normalized"], "acme");
+    assert_eq!(m["normalized"], "acme works");
     assert_eq!(names_in(&env.docs()), before, "dry run changes nothing");
     assert!(!env.path("cfg/name-lists/company_name.yaml").exists());
 }
@@ -254,7 +254,7 @@ fn plan_apply_undo_round_trip_is_byte_identical() {
     assert_eq!(files[1]["learn_status"], "known");
     assert!(!a.exists() && !b.exists());
     let companies = std::fs::read_to_string(env.path("cfg/name-lists/company_name.yaml")).unwrap();
-    assert!(companies.contains("\"ACME Corp\""), "{companies}");
+    assert!(companies.contains("\"ACME Works\""), "{companies}");
 
     // Enrichment is visible to `inspect`.
     let target = files[0]["target"].as_str().unwrap();
@@ -263,7 +263,7 @@ fn plan_apply_undo_round_trip_is_byte_identical() {
     let embedded = &inspected["files"][0]["embedded"];
     assert_eq!(
         embedded["attachment"]["fields"]["company_name"],
-        "ACME Corp"
+        "ACME Works"
     );
 
     // Applying the same plan again fails per file (sources are gone).
@@ -285,7 +285,7 @@ fn plan_apply_undo_round_trip_is_byte_identical() {
     );
     let companies = std::fs::read_to_string(env.path("cfg/name-lists/company_name.yaml")).unwrap();
     assert!(
-        !companies.contains("ACME Corp"),
+        !companies.contains("ACME Works"),
         "learned name reverted: {companies}"
     );
 
@@ -313,7 +313,7 @@ fn rename_text_output_and_ndjson_events() {
     assert_eq!(out.status.code(), Some(0));
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
-        text.contains("text_invoice_acme.pdf  →  20260315 ACME Corp AP 1,234.56.pdf"),
+        text.contains("text_invoice_acme.pdf  →  20260315 ACME Works AP 1234.56.pdf"),
         "{text}"
     );
     assert!(text.contains("Dry run: 1 to rename"), "{text}");
@@ -379,7 +379,7 @@ fn only_rename_needs_provider_credentials() {
     // Switch to a cloud provider without an API key.
     std::fs::write(
         env.path("cfg/config.yaml"),
-        "config_version: 4\nai:\n  provider: openai\ncompany:\n  name: Test Company\n",
+        "config_version: 4\nai:\n  provider: openai\ncompany:\n  names: [Test Company]\n",
     )
     .unwrap();
     let (code, v) = env.json(&["rename", "-o", "json", docs.to_str().unwrap()]);
@@ -418,7 +418,7 @@ fn bad_config_exits_3() {
 fn auth_failure_on_every_file_exits_11() {
     let url = mock(Arc::new(|_| (401, OPENAI_401.to_string())));
     let env = Env::new(&format!(
-        "config_version: 4\nai:\n  provider: openai\n  api_key: sk-bad\n  base_url: \"{url}/v1\"\n  max_retries: 0\ncompany:\n  name: Test Company\n"
+        "config_version: 4\nai:\n  provider: openai\n  api_key: sk-bad\n  base_url: \"{url}/v1\"\n  max_retries: 0\ncompany:\n  names: [Test Company]\n"
     ));
     env.add_doc("text_invoice_acme.pdf");
     env.add_doc("text_letter_globex.pdf");
@@ -435,7 +435,7 @@ fn auth_failure_on_every_file_exits_11() {
 #[test]
 fn offline_mode_rejects_cloud_provider() {
     let env = Env::new(
-        "config_version: 4\nai:\n  provider: openai\n  api_key: sk-x\ncompany:\n  name: T\n",
+        "config_version: 4\nai:\n  provider: openai\n  api_key: sk-x\ncompany:\n  names: [T]\n",
     );
     env.add_doc("text_invoice_acme.pdf");
     let docs = env.docs();
@@ -805,8 +805,8 @@ fn rerunning_on_renamed_duplicates_changes_nothing() {
     assert_eq!(
         names,
         [
-            "20260315 ACME Corp AP 1,234.56.pdf",
-            "20260315 ACME Corp AP 1,234.56_(1).pdf"
+            "20260315 ACME Works AP 1234.56.pdf",
+            "20260315 ACME Works AP 1234.56_(1).pdf"
         ]
     );
     let hashes = |d: &Path| -> Vec<Vec<u8>> {
@@ -871,7 +871,7 @@ fn dangling_symlink_counts_as_taken_when_planning() {
     env.add_doc("text_invoice_acme.pdf");
     std::os::unix::fs::symlink(
         env.path("nowhere"),
-        env.docs().join("20260315 ACME Corp AP 1,234.56.pdf"),
+        env.docs().join("20260315 ACME Works AP 1234.56.pdf"),
     )
     .unwrap();
     let docs = env.docs();
@@ -879,7 +879,7 @@ fn dangling_symlink_counts_as_taken_when_planning() {
     assert_eq!(code, 0);
     assert_eq!(
         plan["items"][0]["proposed_name"],
-        "20260315 ACME Corp AP 1,234.56_(1).pdf"
+        "20260315 ACME Works AP 1234.56_(1).pdf"
     );
 }
 
@@ -1030,7 +1030,7 @@ fn missing_model_hint_is_scoped_and_privacy_aware() {
     assert!(text.contains("page 1 sent to AI as an image"), "{text}");
 
     let env = Env::new(&format!(
-        "config_version: 4\nprivacy: offline\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{}\"\n  max_retries: 0\ncompany:\n  name: Test Company\n",
+        "config_version: 4\nprivacy: offline\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{}\"\n  max_retries: 0\ncompany:\n  names: [Test Company]\n",
         acme_mock()
     ));
     env.add_doc("image_invoice_springfield.pdf");
@@ -1109,7 +1109,7 @@ fn ndjson_schema_and_missing_command_are_structured() {
 #[test]
 fn review_entries_carry_evidence_and_commands() {
     let env = Env::new(&format!(
-        "config_version: 4\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{}\"\n  max_retries: 0\ncompany:\n  name: Test Company\nharmonization:\n  decider: \"off\"\n",
+        "config_version: 4\nai:\n  provider: ollama\n  model: gemma4\n  base_url: \"{}\"\n  max_retries: 0\ncompany:\n  names: [Test Company]\nharmonization:\n  decider: \"off\"\n",
         acme_mock()
     ));
     std::fs::create_dir_all(env.path("cfg/name-lists")).unwrap();
@@ -1131,7 +1131,7 @@ fn review_entries_carry_evidence_and_commands() {
     assert_eq!(code, 0, "{v:#}");
     let (_, v) = env.json(&["names", "review", "-o", "json"]);
     let e = &v["entries"][0];
-    assert_eq!(e["canonical"], "ACME Corp", "{v:#}");
+    assert_eq!(e["canonical"], "ACME Works", "{v:#}");
     let ev = &e["evidence"];
     assert_eq!(ev["candidates"][0]["name"], "ACME Holding");
     assert_eq!(ev["source"], "text_invoice_acme.pdf", "file name only");
@@ -1148,10 +1148,10 @@ fn review_entries_carry_evidence_and_commands() {
         q(&env.path("cfg/config.yaml"))
     );
     assert!(
-        cmds.contains(&format!("{pre}names merge 'ACME Corp' 'ACME Holding'").as_str()),
+        cmds.contains(&format!("{pre}names merge 'ACME Works' 'ACME Holding'").as_str()),
         "{cmds:?}"
     );
-    assert!(cmds.contains(&format!("{pre}names review --accept 'ACME Corp'").as_str()));
+    assert!(cmds.contains(&format!("{pre}names review --accept 'ACME Works'").as_str()));
     let file = std::fs::read_to_string(env.path("cfg/name-lists/company_name.yaml")).unwrap();
     assert!(
         file.contains("  review:\n    reason: "),
@@ -1163,7 +1163,7 @@ fn review_entries_carry_evidence_and_commands() {
     );
     assert!(!file.contains(docs.to_str().unwrap()), "no absolute paths");
     // Accept → user-owned; undo keeps it and says so.
-    let (code, _) = env.json(&["names", "review", "--accept", "ACME Corp", "-o", "json"]);
+    let (code, _) = env.json(&["names", "review", "--accept", "ACME Works", "-o", "json"]);
     assert_eq!(code, 0);
     let (code, v) = env.json(&["undo", "-o", "json"]);
     assert_eq!(code, 0, "{v:#}");
@@ -1171,7 +1171,7 @@ fn review_entries_carry_evidence_and_commands() {
     let (_, v) = env.json(&["names", "list", "-o", "json"]);
     assert_eq!(v["entries"].as_array().unwrap().len(), 2);
     // Spelling fix via rename; merge into a missing target hints rename.
-    let (code, v) = env.json(&["names", "merge", "ACME Corp", "ACME", "-o", "json"]);
+    let (code, v) = env.json(&["names", "merge", "ACME Works", "ACME", "-o", "json"]);
     assert_eq!(code, 2);
     assert!(
         v["error"]["hint"]
@@ -1179,7 +1179,7 @@ fn review_entries_carry_evidence_and_commands() {
             .unwrap()
             .contains("names --field company_name rename")
     );
-    let (code, v) = env.json(&["names", "rename", "ACME Corp", "ACME", "-o", "json"]);
+    let (code, v) = env.json(&["names", "rename", "ACME Works", "ACME", "-o", "json"]);
     assert_eq!(code, 0, "{v:#}");
     assert_eq!(v["entries"][0]["canonical"], "ACME");
 }
@@ -1190,7 +1190,7 @@ fn undo_reports_entries_renamed_by_the_user_as_kept() {
     let doc = env.add_doc("text_invoice_acme.pdf");
     let (code, v) = env.json(&["rename", "-o", "json", doc.to_str().unwrap()]);
     assert_eq!(code, 0, "{v:#}");
-    let (code, v) = env.json(&["names", "rename", "ACME Corp", "ACME", "-o", "json"]);
+    let (code, v) = env.json(&["names", "rename", "ACME Works", "Acme Works", "-o", "json"]);
     assert_eq!(code, 0, "{v:#}");
     assert_eq!(v["entries"][0]["source"], "user");
     let (code, v) = env.json(&["undo", "-o", "json"]);
@@ -1205,7 +1205,7 @@ fn undo_reports_entries_renamed_by_the_user_as_kept() {
         "{v:#}"
     );
     let (_, v) = env.json(&["names", "list", "-o", "json"]);
-    assert_eq!(v["entries"][0]["canonical"], "ACME");
+    assert_eq!(v["entries"][0]["canonical"], "Acme Works");
 }
 
 #[test]
@@ -1240,7 +1240,7 @@ fn data_dir_env_isolates_journal_and_models() {
 #[test]
 fn own_company_is_never_the_counterparty_nor_learned() {
     // The model wrongly names my company as the counterparty and says AR.
-    let reply = r#"{"model":"gemma4","message":{"role":"assistant","content":"{\"company_name\":\"Test Company GmbH\",\"issuer\":\"ACME Corp\",\"recipient\":\"Test Company GmbH\",\"document_date\":\"15.03.2026\",\"document_type\":\"AR\",\"total_amount\":\"1,234.56\",\"currency\":\"EUR\",\"description\":\"\"}"},"done":true,"done_reason":"stop"}"#;
+    let reply = r#"{"model":"gemma4","message":{"role":"assistant","content":"{\"company_name\":\"Test Company GmbH\",\"issuer\":\"ACME Works\",\"recipient\":\"Test Company GmbH\",\"document_date\":\"15.03.2026\",\"document_type\":\"AR\",\"total_amount\":\"1,234.56\",\"currency\":\"EUR\",\"description\":\"\"}"},"done":true,"done_reason":"stop"}"#;
     let env = Env::ollama(&mock(Arc::new(move |_| (200, reply.to_string()))));
     env.add_doc("text_invoice_acme.pdf");
     let docs = env.docs();
@@ -1249,7 +1249,7 @@ fn own_company_is_never_the_counterparty_nor_learned() {
     assert_eq!(
         // The issuer as printed, minus its legal form.
         v["files"][0]["name"],
-        "20260315 ACME AP EUR 1,234.56.pdf",
+        "20260315 ACME Works AP EUR 1234.56.pdf",
         "{v:#}"
     );
     let names = std::fs::read_to_string(env.path("cfg/name-lists/company_name.yaml")).unwrap();
@@ -1259,7 +1259,7 @@ fn own_company_is_never_the_counterparty_nor_learned() {
 #[test]
 fn provider_override_uses_that_providers_key_variable() {
     let env = Env::new(
-        "config_version: 4\nai:\n  provider: openai\n  api_key: \"${OPENAI_API_KEY}\"\ncompany:\n  name: Test Company\n",
+        "config_version: 4\nai:\n  provider: openai\n  api_key: \"${OPENAI_API_KEY}\"\ncompany:\n  names: [Test Company]\n",
     );
     std::fs::write(env.path("cfg/.env"), "OPENAI_API_KEY=sk-openai-test\n").unwrap();
     env.add_doc("text_invoice_acme.pdf");

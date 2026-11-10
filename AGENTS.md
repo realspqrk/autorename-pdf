@@ -1,6 +1,6 @@
 # AutoRename-PDF
 
-Rename PDFs from their content (AI + local OCR). Rust workspace, one binary `autorename-pdf` (CLI + egui GUI). Default name `YYYYMMDD COMPANY AP 12,13.pdf`; academic profile: date, author, venue, title.
+Rename PDFs from their content (AI + local OCR). Rust workspace, one binary `autorename-pdf` (CLI + egui GUI). Default name `YYYYMMDD COMPANY AP EUR 12.13.pdf`; academic profile: date, author, venue, title.
 
 Tool-agnostic source of truth for agents. Be concise; smallest correct diff.
 

@@ -780,9 +780,11 @@ pub struct SetupArgs {
     /// Model id (ai.model)
     #[arg(long, value_name = "ID")]
     pub model: Option<String>,
-    /// YOUR company name (company.name): tells bills from invoices you sent
+    /// YOUR name on invoices (company.names); repeat for each name
+    ///
+    /// Replaces the saved list (company, trading or old names, your own).
     #[arg(long, value_name = "NAME")]
-    pub company: Option<String>,
+    pub company: Vec<String>,
     /// Naming profile (business, academic, or a custom id)
     #[arg(long, value_name = "ID")]
     pub profile: Option<String>,

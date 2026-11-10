@@ -97,12 +97,14 @@ pub struct SettingsForm {
     pub outgoing: String,
     pub ocr_language: String,
     pub ocr_threads: u32,
-    /// `company.name`.
+    /// `company.names`, one per line (commas occur in legal names).
     pub company: String,
-    /// `output.language`, `output.date_format`, `output.amount_format`.
+    /// `output.language`, `output.date_format`, `output.amount_format`,
+    /// `output.decimal_separator`.
     pub out_language: String,
     pub date_format: String,
     pub amount_format: String,
+    pub decimal_separator: String,
     pub enrich: bool,
     pub learn: bool,
     pub decider: usize,
@@ -176,7 +178,7 @@ pub fn date_example(fmt: &str) -> String {
 }
 
 /// `amount_format` applied to a sample amount (core's formatter).
-pub fn amount_example(fmt: &str) -> String {
+pub fn amount_example(fmt: &str, sep: &str) -> String {
     let a = autorename_core::profiles::Amount {
         field: "x".into(),
         amount: "amount".into(),
@@ -185,7 +187,7 @@ pub fn amount_example(fmt: &str) -> String {
     let mut f = serde_json::Map::new();
     f.insert("amount".into(), "12,13".into());
     f.insert("currency".into(), "EUR".into());
-    autorename_core::pipeline::derive_amount(&a, &mut f, fmt);
+    autorename_core::pipeline::derive_amount(&a, &mut f, fmt, sep);
     f.get("x")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
@@ -218,10 +220,11 @@ impl SettingsForm {
             outgoing: s.pdf.outgoing_invoice.clone(),
             ocr_language: s.ocr.language.clone(),
             ocr_threads: s.ocr.threads,
-            company: s.company_name.clone(),
+            company: s.company_names.join("\n"),
             out_language: s.output_language.clone(),
             date_format: s.date_format.clone(),
             amount_format: s.amount_format.clone(),
+            decimal_separator: s.decimal_separator.clone(),
             enrich: s.enrich_enabled,
             learn: s.auto_learn,
             decider: match s.decider {
@@ -277,7 +280,7 @@ impl SettingsForm {
     /// the form owns. Saving writes only the ones that differ from the
     /// saved form ([`SettingsForm::changed_edits`]).
     pub fn edits(&self) -> Vec<(Option<&'static str>, &'static str, String)> {
-        use autorename_core::config_edit::quoted;
+        use autorename_core::config_edit::{quoted, quoted_list};
         let t = |i: usize| ["auto", "true", "false"][i.min(2)].to_string();
         let mut v = vec![
             (
@@ -323,10 +326,15 @@ impl SettingsForm {
             ),
             (Some("ocr"), "language", quoted(self.ocr_language.trim())),
             (Some("ocr"), "threads", self.ocr_threads.to_string()),
-            (Some("company"), "name", quoted(self.company.trim())),
+            (Some("company"), "names", quoted_list(&self.company_names())),
             (Some("output"), "language", quoted(self.out_language.trim())),
             (Some("output"), "date_format", quoted(&self.date_format)),
             (Some("output"), "amount_format", quoted(&self.amount_format)),
+            (
+                Some("output"),
+                "decimal_separator",
+                quoted(&self.decimal_separator),
+            ),
             (Some("enrich"), "enabled", self.enrich.to_string()),
             (Some("harmonization"), "auto_learn", self.learn.to_string()),
             (
@@ -417,6 +425,15 @@ impl SettingsForm {
     }
 
     /// Invalid input per field (copy for the field helper).
+    /// `company.names` from the one-per-line field (blank lines dropped).
+    pub fn company_names(&self) -> Vec<&str> {
+        self.company
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
     pub fn problem(&self, f: FormField) -> Option<String> {
         let code = |v: &str| {
             let v = v.trim();

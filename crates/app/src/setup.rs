@@ -7,7 +7,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use autorename_core::config::{self, Level};
-use autorename_core::config_edit::{get_env, quoted, set, set_env, write_env};
+use autorename_core::config_edit::{self, get_env, quoted, set, set_env, write_env};
 use autorename_core::pipeline::SCHEMA_VERSION;
 use autorename_core::{Error, ExitCode, Result, fsx, ocr};
 use serde::Serialize;
@@ -313,9 +313,18 @@ fn plan_edits(a: &SetupArgs, ctx: &Ctx<'_>, d: &mut Draft) -> Result<()> {
     if let Some(m) = &a.model {
         d.edit("model", &[(Some("ai"), "model", q(m))]);
     }
-    if let Some(c) = &a.company {
-        // Always a string: a name like "1234" must not become a number.
-        d.edit("company", &[(Some("company"), "name", quoted(c.trim()))]);
+    if !a.company.is_empty() {
+        // Always strings: a name like "1234" must not become a number.
+        let names: Vec<&str> = a
+            .company
+            .iter()
+            .map(|c| c.trim())
+            .filter(|c| !c.is_empty())
+            .collect();
+        d.edit(
+            "company",
+            &[(Some("company"), "names", config_edit::quoted_list(&names))],
+        );
     }
     if let Some(p) = &a.profile {
         d.edit("profile", &[(None, "profile", q(p))]);
@@ -501,7 +510,7 @@ fn validate(
             if let Some(w) = v
                 .issues
                 .iter()
-                .find(|i| i.level == Level::Warning && i.field == "company.name")
+                .find(|i| i.level == Level::Warning && i.field == "company.names")
             {
                 s = s.detail(w.message.clone()).hint(format!(
                     "Run `{} \"Your Company\"`.",

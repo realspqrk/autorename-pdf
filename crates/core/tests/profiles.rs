@@ -65,10 +65,10 @@ fn builtin_ids_fields_and_templates() {
     assert!(
         b.fields["company_name"]
             .description
-            .contains("My company name is \"Test Company\"")
+            .contains("My own company goes by these names: \"Test Company\".")
     );
     let mut c = sample_config();
-    c["company"]["name"] = json!("");
+    c["company"]["names"] = json!([]);
     let b = select_profile(&c, None).unwrap().1;
     assert!(
         b.fields["company_name"]
@@ -426,7 +426,7 @@ fn reject_placeholder_syntax() {
 #[test]
 fn interpolation_is_single_pass() {
     let mut c = sample_config();
-    c["company"]["name"] = json!("Own {literal}");
+    c["company"]["names"] = json!(["Own {literal}", "Me"]);
     c["output"]["language"] = json!("German");
     c["pdf"]["incoming_invoice"] = json!("IN");
     c["pdf"]["outgoing_invoice"] = json!("OUT");
@@ -436,15 +436,15 @@ fn interpolation_is_single_pass() {
             &c
         )
         .unwrap(),
-        "{tag} Own {literal}|German|IN|OUT"
+        "{tag} \"Own {literal}\", \"Me\"|German|IN|OUT"
     );
     c["profiles"] =
         json!({"business": {"fields": {"company_name": {"description": "CUSTOM {company}"}}}});
     assert_eq!(
         select_profile(&c, None).unwrap().1.fields["company_name"].description,
-        "CUSTOM Own {literal}"
+        "CUSTOM \"Own {literal}\", \"Me\""
     );
-    c["company"]["name"] = json!("");
+    c["company"]["names"] = json!([]);
     assert_eq!(
         select_profile(&c, None).unwrap().1.fields["company_name"].description,
         "CUSTOM "
@@ -454,7 +454,7 @@ fn interpolation_is_single_pass() {
 #[test]
 fn inherited_interpolation_happens_once() {
     let mut c = sample_config();
-    c["company"]["name"] = json!("Own {literal}");
+    c["company"]["names"] = json!(["Own {literal}"]);
     c["profiles"] = json!({
         "business": {"fields": {"company_name": {"description": "Issuer {company} {{tag}}"}}},
         "child": {"extends": "business"},
@@ -463,7 +463,7 @@ fn inherited_interpolation_happens_once() {
     let p = resolve_profiles(&c).unwrap();
     assert_eq!(
         p["grandchild"].fields["company_name"].description,
-        "Issuer Own {literal} {tag}"
+        "Issuer \"Own {literal}\" {tag}"
     );
 }
 

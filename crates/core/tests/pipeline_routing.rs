@@ -123,7 +123,7 @@ fn settings(url: &str, vision: Value, threshold: f64) -> Settings {
         "config_version": 4,
         "ai": {"provider": "ollama", "model": "gemma4", "base_url": url, "max_retries": 0},
         "pdf": {"ocr": "auto", "vision": vision, "text_quality_threshold": threshold},
-        "company": {"name": ME},
+        "company": {"names": [ME]},
         "enrich": {"enabled": false},
         "harmonization": {"decider": "off"}
     });
@@ -185,11 +185,11 @@ fn outgoing_invoice_needs_no_review() {
     assert_eq!(item.tier, Some(Tier::Text));
 }
 
-/// A logo page scores 0.75: at the default limit 0.8 without OCR models
-/// its image goes to the model in the one request; at 0.75 it does not.
+/// A logo page scores 0.75. Without OCR models its clean text layer is
+/// sent as text (no image) at any limit, with `ocr_models_missing` at 0.8.
 /// The plan records the page's score and visual flag.
 #[test]
-fn logo_page_goes_to_vision_without_ocr_models() {
+fn logo_page_stays_text_without_ocr_models() {
     let dir = tempfile::tempdir().unwrap();
     let pdf = page_pdf(
         dir.path(),
@@ -206,13 +206,13 @@ fn logo_page_goes_to_vision_without_ocr_models() {
     let item = plan(&pdf, &settings(&mock.url, json!("auto"), 0.8));
     let reqs = mock.requests();
     assert_eq!(reqs.len(), 1);
-    assert_eq!(images_in(&reqs[0]), 1);
-    assert_eq!(item.tier, Some(Tier::VisionNeeded));
+    assert_eq!(images_in(&reqs[0]), 0);
+    assert_eq!(item.tier, Some(Tier::Text));
     assert_eq!(item.quality, Some(0.75));
     let pq = &item.page_quality[0];
     assert_eq!(
         (pq.text, pq.visual, pq.ocr, pq.image),
-        (0.75, true, None, true)
+        (0.75, true, None, false)
     );
     if autorename_core::ocr::ENGINE_AVAILABLE {
         assert!(has(&item, "ocr_models_missing"), "{:?}", item.warnings);

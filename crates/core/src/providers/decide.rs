@@ -4,10 +4,11 @@
 //! Backends (`harmonization.decider`):
 //! - `ai` (default): a tiny structured call on the main provider whose schema
 //!   is `{"choice": enum["0".."k-1","new"]}`.
-//! - `openai-decisions`, `jev`: BEST-EFFORT. The request/response shapes
-//!   below come from the abridged notes in `followup.md` ("Decision models"),
-//!   not from the full API docs. Both need a live check before being
-//!   recommended; their response parsing is deliberately tolerant.
+//! - `openai-decisions`: `POST /v1/decisions` with one `choice` question
+//!   (`questions[].choices[]`, 2–255 options), answer in `answers[0].choice`
+//!   (developers.openai.com/api/docs/guides/decisions, read 2026-11-10).
+//! - `jev`: BEST-EFFORT shape from abridged notes, not live-checked; its
+//!   response parsing is deliberately tolerant.
 //! - `off`: no call, `Ok(None)`.
 
 use std::time::Duration;
@@ -192,18 +193,15 @@ fn decide_remote(
         cfg.url.clone()
     };
     guard_offline(cfg.provider.privacy, &url, label)?;
+    // The API allows 255 choices: the best 254 candidates plus "new".
+    let candidates = &candidates[..candidates.len().min(254)];
     let mut options: Vec<String> = candidates.iter().map(|c| c.canonical.clone()).collect();
     options.push(w.new_option.clone());
-    // BEST-EFFORT shapes (followup.md, abridged): a `choice` question over
-    // developer-supplied options.
-    let mut body = json!({
-        "type": "choice",
-        "input": w.question,
-        "options": options,
-    });
-    if kind == Kind::Decisions {
-        body["model"] = json!(DECISIONS_MODEL);
-    }
+    let body = match kind {
+        Kind::Decisions => decisions_body(candidates, w),
+        // BEST-EFFORT (abridged notes): a `choice` over given options.
+        _ => json!({"type": "choice", "input": w.question, "options": options}),
+    };
     let call = HttpCall {
         url,
         headers: vec![("authorization", format!("Bearer {}", cfg.api_key))],
@@ -215,7 +213,11 @@ fn decide_remote(
         label,
     )?;
     let (raw, _) = send(&client, &call, kind, &cfg.provider.retry)?;
-    match parse_choice(&raw.body, &options) {
+    let picked = match kind {
+        Kind::Decisions => decisions_choice(&raw.body, candidates.len()),
+        _ => parse_choice(&raw.body, &options),
+    };
+    match picked {
         Some(i) if i < candidates.len() => Ok(Verdict::Existing(candidates[i].canonical.clone())),
         Some(_) => Ok(Verdict::New),
         None => Err(perr(
@@ -224,6 +226,40 @@ fn decide_remote(
             "decision response has no recognizable choice",
         )
         .with_request_id(raw.request_id)),
+    }
+}
+
+/// One `choice` question: values `"0".."k-1"` (candidate index, the name as
+/// description) and `"new"`.
+fn decisions_body(candidates: &[Candidate], w: &Wording) -> Value {
+    let mut choices: Vec<Value> = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, c)| json!({"value": i.to_string(), "description": c.canonical}))
+        .collect();
+    choices.push(json!({"value": "new", "description": w.new_option}));
+    json!({
+        "model": DECISIONS_MODEL,
+        "input": [
+            {"role": "developer", "content": w.system},
+            {"role": "user", "content": w.question},
+        ],
+        "questions": [{
+            "type": "choice",
+            "name": "match",
+            "instructions": format!("Pick the matching entry of the {} or \"new\".", w.known.to_lowercase()),
+            "choices": choices,
+        }],
+    })
+}
+
+/// Index picked in a Decisions response (`answers[0].choice`); `k` = "new".
+/// A refusal or a value outside the choices is `None`.
+fn decisions_choice(body: &Value, k: usize) -> Option<usize> {
+    let answer = body.get("answers")?.get(0)?;
+    match answer.get("choice")?.as_str()? {
+        "new" => Some(k),
+        v => v.parse::<usize>().ok().filter(|i| *i < k),
     }
 }
 
@@ -284,6 +320,37 @@ mod tests {
         );
         assert_eq!(parse_choice(&json!({"choice": "Globex"}), &opts), None);
         assert_eq!(parse_choice(&json!({}), &opts), None);
+    }
+
+    #[test]
+    fn decisions_request_and_answer() {
+        let cands = [Candidate {
+            canonical: "OpenAI".into(),
+            matched: "OpenAI".into(),
+            score: 0.9,
+        }];
+        let w = wording("company_name", "OpenAI OpCo");
+        let body = decisions_body(&cands, &w);
+        assert_eq!(body["model"], DECISIONS_MODEL);
+        let q = &body["questions"][0];
+        assert_eq!(q["type"], "choice");
+        assert_eq!(
+            q["choices"][0],
+            json!({"value": "0", "description": "OpenAI"})
+        );
+        assert_eq!(q["choices"][1]["value"], "new");
+        let answer =
+            |c: &str| json!({"answers": [{"type": "choice", "name": "match", "choice": c}]});
+        assert_eq!(decisions_choice(&answer("0"), 1), Some(0));
+        assert_eq!(decisions_choice(&answer("new"), 1), Some(1));
+        assert_eq!(decisions_choice(&answer("7"), 1), None);
+        assert_eq!(
+            decisions_choice(
+                &json!({"answers": [{"type": "refusal", "name": "match"}]}),
+                1
+            ),
+            None
+        );
     }
 
     #[test]

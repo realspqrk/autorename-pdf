@@ -368,7 +368,8 @@ fn measured_geometry_all_interactive_nodes() {
                             problems.push(format!("button height: {id}"))
                         }
                         // Multi-line field: 4 rows inside 8 px padding (96 h).
-                        Role::TextInput if label == "Extra instructions" && r.height() == 80.0 => {}
+                        // Multi-line fields: rows + padding, on the 4-pt grid.
+                        Role::TextInput if r.height() > 32.0 && r.height() % 4.0 == 0.0 => {}
                         Role::ComboBox | Role::Tab | Role::TextInput if r.height() != 32.0 => {
                             problems.push(format!("control height: {id}"))
                         }
@@ -627,7 +628,7 @@ fn setup_save_writes_config_with_company() {
     app.act(&ctx, Action::SaveSetup);
     assert_eq!(app.m.setup.error, None);
     let s = app.m.config.settings.as_ref().expect("config valid");
-    assert_eq!(s.company_name, "ACME \"Nord\" GmbH");
+    assert_eq!(s.company_names, ["ACME \"Nord\" GmbH"]);
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("${ANTHROPIC_API_KEY}"), "{text}");
     assert!(text.contains("# YOUR company"), "comments kept");
@@ -1857,7 +1858,7 @@ fn naming_and_reading_edits_round_trip_real_save() {
     assert!(f.problem(FormField::DateFormat).is_none());
     assert!(f.save_blocker().is_none());
     let changed = f.changed_edits(&m.settings.saved);
-    assert!(changed.contains(&(Some("company"), "name", "\"1234\"".into())));
+    assert!(changed.contains(&(Some("company"), "names", "[\"1234\"]".into())));
     assert!(changed.contains(&(Some("pdf"), "max_pages", "5".into())));
     assert!(
         !changed
@@ -1869,7 +1870,7 @@ fn naming_and_reading_edits_round_trip_real_save() {
     app.act(&ctx, Action::SaveSettings);
     assert!(app.m.settings.error.is_none(), "{:?}", app.m.settings.error);
     let text = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-    assert!(text.contains("  name: \"1234\""), "{text}");
+    assert!(text.contains("  names: [\"1234\"]"), "{text}");
     assert!(text.contains("  max_pages: 5"), "{text}");
     assert!(text.contains("  date_format: \"%Y-%m-%d\""), "{text}");
     assert!(text.contains("  model: null                   # null = provider default"));
@@ -1879,7 +1880,7 @@ fn naming_and_reading_edits_round_trip_real_save() {
         "one line per key, nothing appended"
     );
     let s = app.m.config.settings.as_ref().expect("reloaded");
-    assert_eq!(s.company_name, "1234");
+    assert_eq!(s.company_names, ["1234"]);
     assert_eq!(s.date_format, "%Y-%m-%d");
     assert_eq!(s.pdf.max_pages, 5);
     assert_eq!(s.pdf.incoming_invoice, "ER");
@@ -2044,10 +2045,11 @@ fn naming_samples_and_no_matching_caption() {
     let mut f = m.settings.form.clone();
     assert_eq!(
         sample_name("business", &profiles["business"], &f),
-        "20251103 Amazon AP EUR 12,13.pdf"
+        "20251103 Amazon AP EUR 12.13.pdf"
     );
     f.date_format = "%Y-%m-%d".into();
     f.amount_format = "{amount} {currency}".into();
+    f.decimal_separator = ",".into();
     f.incoming = "ER".into();
     assert_eq!(
         sample_name("business", &profiles["business"], &f),

@@ -67,7 +67,7 @@ fn spec_filename_table() {
             json!({"document_date": DATE, "company_name": "<>:", "document_type": "?*", "description": ""}),
             None,
             None,
-            "20260906 Unknown Unknown.pdf",
+            "20260906.pdf",
         ),
         (
             "academic",
@@ -123,13 +123,7 @@ fn spec_filename_table() {
             "00000000.pdf",
         ),
         ("academic", json!({}), None, None, "00000000.pdf"),
-        (
-            "business",
-            json!({}),
-            None,
-            None,
-            "00000000 Unknown Unknown.pdf",
-        ),
+        ("business", json!({}), None, None, "00000000.pdf"),
         (
             "business",
             json!({"document_date": "not a date", "company_name": "ACME", "document_type": "AP", "description": "12,13"}),
@@ -317,7 +311,18 @@ fn date_behavior_and_category_overlap() {
             None,
             None
         ),
-        "20260906 ACME Letter Letter.pdf"
+        "20260906 ACME Letter.pdf"
+    );
+    // A type the subject starts with is not said twice.
+    assert_eq!(
+        rendered(
+            &c,
+            "business",
+            json!({"document_date": DATE, "company_name": "", "document_type": "Hausübung", "description": "Hausübung Wiederholung"}),
+            None,
+            None
+        ),
+        "20260906 Hausübung Wiederholung.pdf"
     );
     // Custom date format and NFC of composed values (test_document_processing).
     assert_eq!(
@@ -349,7 +354,7 @@ fn date_behavior_and_category_overlap() {
             None,
             None
         ),
-        "00000000 Unknown Unknown.pdf"
+        "00000000.pdf"
     );
 }
 

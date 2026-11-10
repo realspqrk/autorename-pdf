@@ -26,6 +26,7 @@ pub const CONFIG_VERSION: u64 = 4;
 pub const PROVIDERS: [&str; 5] = ["openai", "anthropic", "gemini", "xai", "ollama"];
 pub const DECIDERS: [&str; 4] = ["ai", "openai-decisions", "jev", "off"];
 pub const PRIVACY_MODES: [&str; 2] = ["cloud", "offline"];
+pub const DECIMAL_SEPARATORS: [&str; 2] = [".", ","];
 const PLACEHOLDER_API_KEYS: [&str; 2] = ["your-api-key-here", "your-api-key"];
 
 /// The single default-model table (per provider). Values come from the
@@ -82,8 +83,8 @@ pub fn defaults() -> Value {
             "outgoing_invoice": "AR"
         },
         "ocr": {"language": "auto", "threads": 4},
-        "company": {"name": ""},
-        "output": {"language": "English", "date_format": "%Y%m%d", "amount_format": "{currency} {amount}"},
+        "company": {"names": []},
+        "output": {"language": "English", "date_format": "%Y%m%d", "amount_format": "{currency} {amount}", "decimal_separator": "."},
         "enrich": {"enabled": true},
         "harmonization": {"auto_learn": true, "decider": "ai", "decider_api_key": ""},
         "prompt_extension": "",
@@ -99,6 +100,8 @@ pub fn defaults() -> Value {
 #[derive(Debug, Clone, Copy)]
 enum Kind {
     Str,
+    /// List of strings.
+    StrList,
     Bool,
     /// `true | false | "auto"`
     Toggle,
@@ -134,13 +137,14 @@ const SECTIONS: &[(&str, &[(&str, Kind)])] = &[
         ],
     ),
     ("ocr", &[("language", Kind::Str), ("threads", Kind::PosInt)]),
-    ("company", &[("name", Kind::Str)]),
+    ("company", &[("names", Kind::StrList)]),
     (
         "output",
         &[
             ("language", Kind::Str),
             ("date_format", Kind::Str),
             ("amount_format", Kind::Str),
+            ("decimal_separator", Kind::OneOf(&DECIMAL_SEPARATORS)),
         ],
     ),
     ("enrich", &[("enabled", Kind::Bool)]),
@@ -176,6 +180,7 @@ fn type_name(v: &Value) -> &'static str {
 fn check_kind(field: &str, kind: Kind, v: &Value) -> Option<Issue> {
     let ok = match kind {
         Kind::Str => v.is_string(),
+        Kind::StrList => v.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
         Kind::Bool => v.is_boolean(),
         Kind::Toggle => v.is_boolean() || v.as_str() == Some("auto"),
         Kind::UInt => v.as_u64().is_some_and(|n| u32::try_from(n).is_ok()),
@@ -191,6 +196,7 @@ fn check_kind(field: &str, kind: Kind, v: &Value) -> Option<Issue> {
     }
     let expected = match kind {
         Kind::Str => "a string".to_string(),
+        Kind::StrList => "a list of strings".to_string(),
         Kind::Bool => "true or false".to_string(),
         Kind::Toggle => "true, false, or \"auto\"".to_string(),
         Kind::UInt => format!("an integer from 0 to {}", u32::MAX),
@@ -213,6 +219,7 @@ fn check_kind(field: &str, kind: Kind, v: &Value) -> Option<Issue> {
 fn kind_schema(kind: Kind) -> Value {
     match kind {
         Kind::Str => json!({"type": "string"}),
+        Kind::StrList => json!({"type": "array", "items": {"type": "string"}}),
         Kind::Bool => json!({"type": "boolean"}),
         Kind::Toggle => json!({"oneOf": [{"type": "boolean"}, {"const": "auto"}]}),
         Kind::UInt => json!({"type": "integer", "minimum": 0}),
@@ -675,6 +682,21 @@ pub struct Validation {
     pub resolved_profile: Option<Profile>,
 }
 
+/// `company.names`, trimmed, empty entries dropped.
+pub fn company_names(config: &Value) -> Vec<String> {
+    config
+        .get("company")
+        .and_then(|c| c.get("names"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(String::from)
+        .collect()
+}
+
 fn str_at<'a>(config: &'a Value, section: &str, key: &str) -> &'a str {
     config
         .get(section)
@@ -809,10 +831,10 @@ pub fn validate_base(config: &Value, profile_override: Option<&str>) -> Validati
             .hint("Use separators like - _ . or none, e.g. \"%Y-%m-%d\"."),
         );
     }
-    if str_at(config, "company", "name").is_empty() {
+    if company_names(config).is_empty() {
         issues.push(Issue::warning(
-            "company.name",
-            "Company name not configured. AI cannot distinguish incoming vs outgoing invoices.",
+            "company.names",
+            "Your company names are not configured. AI cannot distinguish incoming vs outgoing invoices.",
         ));
     }
 
@@ -1110,11 +1132,14 @@ pub struct Settings {
     pub ai: AiSettings,
     pub pdf: PdfSettings,
     pub ocr: OcrSettings,
-    pub company_name: String,
+    /// `company.names`: every name of my company (trimmed, non-empty).
+    pub company_names: Vec<String>,
     pub output_language: String,
     pub date_format: String,
     /// `{currency}` and `{amount}` → invoice amount in filenames.
     pub amount_format: String,
+    /// `.` or `,`: decimal mark of amounts in filenames.
+    pub decimal_separator: String,
     pub prompt_extension: String,
     pub enrich_enabled: bool,
     pub auto_learn: bool,
@@ -1209,10 +1234,11 @@ pub fn settings(tree: &Value, profile_override: Option<&str>) -> Result<Settings
             language: text("ocr", "language"),
             threads: uint("ocr", "threads")?,
         },
-        company_name: text("company", "name"),
+        company_names: company_names(tree),
         output_language: text("output", "language"),
         date_format: text("output", "date_format"),
         amount_format: text("output", "amount_format"),
+        decimal_separator: text("output", "decimal_separator"),
         prompt_extension: top("prompt_extension").to_string(),
         enrich_enabled: flag("enrich", "enabled"),
         auto_learn: flag("harmonization", "auto_learn"),
@@ -1307,7 +1333,7 @@ mod tests {
     }
 
     fn valid_base() -> Value {
-        merged(json!({"ai": {"api_key": "key", "model": "m"}, "company": {"name": "Acme"}}))
+        merged(json!({"ai": {"api_key": "key", "model": "m"}, "company": {"names": ["Acme"]}}))
     }
 
     fn with(base: Value, patch: Value) -> Value {
@@ -1405,8 +1431,7 @@ mod tests {
         let env = |n: &str| (n == "DEC").then(|| "dec-secret-123456".to_string());
         let tree = |v: Value| from_raw(v, &env).unwrap().0;
         let errs = |t: &Value| fields_at(&validate(t, None), Level::Error);
-        let base =
-            json!({"ai": {"provider": "anthropic", "api_key": "k"}, "company": {"name": "Spqrk"}});
+        let base = json!({"ai": {"provider": "anthropic", "api_key": "k"}, "company": {"names": ["Spqrk"]}});
         // jev without key → error with hint; explicit ${VAR} key → ok.
         let t = tree(with(
             base.clone(),
@@ -1448,7 +1473,7 @@ mod tests {
 
     #[test]
     fn provider_requirements_are_separate_from_base_settings() {
-        let no_key = merged(json!({"company": {"name": "Acme"}}));
+        let no_key = merged(json!({"company": {"names": ["Acme"]}}));
         let s = settings(&no_key, None).expect("apply/undo/inspect need no API key");
         assert_eq!(s.require_provider().unwrap_err().exit_code().code(), 3);
         assert!(!validate(&no_key, None).valid, "config validate reports it");
@@ -1556,9 +1581,9 @@ mod tests {
             ),
             (json!({"ai": {"model": ""}}), vec![], vec!["ai.model"]),
             (
-                json!({"company": {"name": ""}}),
+                json!({"company": {"names": [""]}}),
                 vec![],
-                vec!["company.name"],
+                vec!["company.names"],
             ),
             (
                 json!({"ai": {"api_key": "${MISSING_KEY}"}}),
@@ -1730,7 +1755,7 @@ mod tests {
             assert!(v.issues.iter().any(|i| i.hint.is_some()));
         }
         // --offline on a cloud config: provider forced, default model follows.
-        let mut tree = merged(json!({"ai": {"api_key": "key"}, "company": {"name": "Acme"}}));
+        let mut tree = merged(json!({"ai": {"api_key": "key"}, "company": {"names": ["Acme"]}}));
         apply_overrides(
             &mut tree,
             &Overrides {
@@ -1761,7 +1786,7 @@ mod tests {
             "ANTHROPIC_API_KEY" => Some("sk-ant".to_string()),
             _ => None,
         };
-        let raw = json!({"ai": {"provider": "openai", "model": "gpt-custom", "api_key": "${OPENAI_API_KEY}", "base_url": "https://gw.example.com/v1"}, "company": {"name": "Acme"}});
+        let raw = json!({"ai": {"provider": "openai", "model": "gpt-custom", "api_key": "${OPENAI_API_KEY}", "base_url": "https://gw.example.com/v1"}, "company": {"names": ["Acme"]}});
         let run = |o: Overrides| from_raw_with(raw.clone(), &o, &env).unwrap();
         let ai = |t: &Value| {
             let a = &t["ai"];
@@ -1887,7 +1912,7 @@ mod tests {
 
     #[test]
     fn overrides_and_toggle_parse() {
-        let mut tree = merged(json!({"ai": {"api_key": "key"}, "company": {"name": "Acme"}}));
+        let mut tree = merged(json!({"ai": {"api_key": "key"}, "company": {"names": ["Acme"]}}));
         apply_overrides(
             &mut tree,
             &Overrides {

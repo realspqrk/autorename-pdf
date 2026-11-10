@@ -3,6 +3,7 @@
 //! Functional style: plain functions over data structs/enums. No I/O beyond
 //! what each module documents (config/harmonize/journal touch the filesystem).
 
+pub mod amount;
 pub mod config;
 pub mod config_edit;
 pub mod dates;
