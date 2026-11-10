@@ -1234,6 +1234,13 @@ impl App {
                 if self.m.busy() || self.m.report.is_some() {
                     return;
                 }
+                // Another row's edit is finished first; an invalid one stays
+                // open (with its error) instead of losing the draft.
+                match self.m.editing.clone() {
+                    Some((j, _)) if j == i => return,
+                    Some((j, t)) if !self.m.commit_edit(j, &t) => return,
+                    _ => {}
+                }
                 if let Some(r) = self.m.rows.get(i)
                     && r.checkable()
                 {
@@ -1243,8 +1250,9 @@ impl App {
                     self.m.editing = Some((i, base));
                 }
             }
-            Action::CommitEdit { refocus } => {
+            Action::CommitEdit { row, refocus } => {
                 if let Some((i, t)) = self.m.editing.clone()
+                    && i == row
                     && self.m.commit_edit(i, &t)
                 {
                     self.m.editing = None;

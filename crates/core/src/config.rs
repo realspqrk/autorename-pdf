@@ -1735,7 +1735,13 @@ mod tests {
             &with(valid_base(), json!({"company": {"name": "Acme"}})),
             None,
         );
-        assert!(v.issues[0].hint.as_deref().unwrap().contains("company.names"));
+        assert!(
+            v.issues[0]
+                .hint
+                .as_deref()
+                .unwrap()
+                .contains("company.names")
+        );
     }
 
     #[test]

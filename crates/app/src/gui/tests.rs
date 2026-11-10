@@ -3012,6 +3012,16 @@ fn inline_edit_save_cancel_and_click_away_by_mouse() {
     h.get_by_label("Cancel name edit").click();
     h.run();
     assert!(h.state().m.editing.is_none());
+
+    // Starting another row's edit keeps this draft (Codex review).
+    mouse_edit_row1(&mut h);
+    type_text(&mut h, " W");
+    h.get_by_label_contains("scan_0041.pdf, ").hover();
+    h.run();
+    h.get_by_label("Edit name of scan_0041.pdf").click();
+    h.run();
+    assert!(edited(&h).ends_with(" W.pdf"), "{}", edited(&h));
+    assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(0));
 }
 
 /// Every row shortcut has a control (checklist 13): the row's right-click
