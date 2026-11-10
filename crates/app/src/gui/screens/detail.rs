@@ -378,16 +378,16 @@ fn company_match(
             format!("The {many} list stays unchanged."),
         ),
         (Some(LearnAction::AddAlias { canonical, .. }), Some(LearnStatus::AliasAdded)) => (
-            "Alias added",
+            "Spelling added",
             Tone::Accent,
             theme::icon::LINK,
-            format!("Added to {canonical} in the {many} list."),
+            format!("Added to the other spellings of {canonical}."),
         ),
         (Some(LearnAction::AddAlias { .. }), _) if !done => (
-            "Alias added",
+            "Spelling added",
             Tone::Accent,
             theme::icon::LINK,
-            format!("Will be added to the {many} list on rename."),
+            "Will be added as another spelling on rename.".to_string(),
         ),
         (Some(LearnAction::NewEntry { review: true, .. }), Some(LearnStatus::EntryAdded)) => (
             "Needs a look",

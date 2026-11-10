@@ -1297,7 +1297,7 @@ impl MatchView {
         }
         let band = self.band.as_deref().unwrap_or("");
         let why = match (band, self.outcome) {
-            (">=0.92", _) => "≥ 0.92: added as an alias automatically".to_string(),
+            (">=0.92", _) => "≥ 0.92: added as another spelling automatically".to_string(),
             (_, MatchOutcome::Review) if self.decided_by == DecidedBy::None => {
                 "below 0.92 with the decider off: the new entry needs a look".into()
             }

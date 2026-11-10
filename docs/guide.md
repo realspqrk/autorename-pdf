@@ -49,7 +49,7 @@ In the window, your company names, the document type codes, the date format and 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/gui-settings-dark.png">
-  <img src="images/gui-settings-light.png" alt="Settings, Naming page: your company names one per line, document type codes, date format and decimal mark, with an example file name">
+  <img src="images/gui-settings-light.png" alt="Settings, Naming page: your company names one per line, document type codes, date format, amount format and decimal mark">
 </picture>
 
 ## Offline mode
