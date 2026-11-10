@@ -44,6 +44,23 @@ Also on the right-click menu of PDFs and folders: **AutoRename-PDF > Rename now*
 
 Your company name tells bills you receive (`AP`) from invoices you send (`AR`); change it under Settings (gear icon) > Naming. To see why a name was chosen, open the details panel (button at the right of the header, or <kbd>Ctrl</kbd>+<kbd>\</kbd>).
 
+<table>
+  <tr>
+    <td width="50%"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gui-details-dark.png">
+  <img src="docs/images/gui-details-light.png" alt="The details panel: the fields read from the selected PDF, the company match and the source text">
+</picture></td>
+    <td width="50%"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gui-done-dark.png">
+  <img src="docs/images/gui-done-light.png" alt="The result screen after renaming, with an Undo rename button">
+</picture></td>
+  </tr>
+  <tr>
+    <td align="center">Why this name: the details panel</td>
+    <td align="center">Done, with one-click undo</td>
+  </tr>
+</table>
+
 **Privacy in plain words:** text is read on your computer first. With the default settings, the text of the first three pages goes to the AI provider you chose; page images are sent only when the text cannot be read locally. You can change both in Settings (gear icon) > Processing. In offline mode documents stay on your computer or local network. [More](docs/guide.md#how-a-pdf-is-read).
 
 ## Command line in 60 seconds

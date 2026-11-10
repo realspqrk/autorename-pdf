@@ -46,13 +46,18 @@ fn new_entry(n: &str, review: bool) -> Option<LearnAction> {
     })
 }
 
-/// Business-profile answer; invoices also carry `total_amount`, as the real
-/// model returns it (the details grid's longest label, "Total amount").
+/// Business-profile answer for a document without an amount.
 fn f(date: &str, company: &str, ty: &str, desc: &str) -> Value {
-    let mut v = json!({"document_date": date, "company_name": company, "document_type": ty, "description": desc});
-    if ty == "AP" || ty == "AR" {
-        v["total_amount"] = desc.into();
-    }
+    json!({"document_date": date, "company_name": company, "document_type": ty, "description": desc})
+}
+
+/// Invoice answer as the pipeline leaves it: `total_amount`/`currency` as
+/// printed, `description` re-written with the decimal mark (`EUR 1234.56`).
+fn inv(date: &str, company: &str, ty: &str, printed: &str, currency: &str, amount: &str) -> Value {
+    let desc = format!("{currency} {amount}").trim().to_string();
+    let mut v = f(date, company, ty, &desc);
+    v["total_amount"] = printed.into();
+    v["currency"] = currency.into();
     v
 }
 
@@ -60,27 +65,41 @@ fn specs() -> Vec<Spec> {
     vec![
         Spec {
             old: "scan_0041.pdf",
-            new: Some("20251103 Amazon AP 12,13.pdf"),
+            new: Some("20251103 Northwind Traders AP USD 1249.00.pdf"),
             tier: Some(Tier::Text),
             quality: 0.94,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("03.11.2025", "Amazon", "AP", "12,13"),
+            fields: inv(
+                "03.11.2025",
+                "Northwind Traders",
+                "AP",
+                "1,249.00",
+                "USD",
+                "1249.00",
+            ),
         },
         Spec {
-            old: "Rechnung (2).pdf",
-            new: Some("20251028 Telekom Deutschland AP 54,99.pdf"),
+            old: "invoice (2).pdf",
+            new: Some("20251028 Contoso Telecom AP 54.99.pdf"),
             tier: Some(Tier::Ocr),
             quality: 0.62,
             enrich: None,
-            learn: new_entry("Telekom Deutschland", true),
+            learn: new_entry("Contoso Telecom", true),
             warnings: &[
-                "currency_missing: no currency found for the amount \"54,99\"; please review",
+                "currency_missing: no currency found for the amount \"54.99\"; please review",
             ],
             error: None,
-            fields: f("28.10.25", "TELEKOM DEUTSCHLAND GMBH", "AP", "54,99"),
+            fields: inv(
+                "28.10.2025",
+                "CONTOSO TELECOM LTD",
+                "AP",
+                "54.99",
+                "",
+                "54.99",
+            ),
         },
         Spec {
             old: "broken.pdf",
@@ -98,107 +117,148 @@ fn specs() -> Vec<Spec> {
         },
         Spec {
             old: "IMG_2231.pdf",
-            new: Some("20251015 Bauhaus AP 89,90.pdf"),
+            new: Some("20251015 Globex Hardware AP GBP 64.20.pdf"),
             tier: Some(Tier::VisionNeeded),
             quality: 0.12,
             enrich: None,
             learn: None,
             warnings: &["OCR returned no text"],
             error: None,
-            fields: f("15.10.2025", "Bauhaus", "AP", "89,90"),
+            fields: inv(
+                "15.10.2025",
+                "Globex Hardware",
+                "AP",
+                "64.20",
+                "GBP",
+                "64.20",
+            ),
         },
         Spec {
-            old: "Vertrag_signed.pdf",
-            new: Some("20250901 Stadtwerke München Contract.pdf"),
+            old: "Contract_signed.pdf",
+            new: Some("20250901 Fabrikam Energy Contract.pdf"),
             tier: Some(Tier::Text),
             quality: 0.97,
             enrich: Some("signed"),
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("01.09.2025", "Stadtwerke München", "Contract", ""),
+            fields: f("01.09.2025", "Fabrikam Energy", "Contract", ""),
         },
         Spec {
             old: "invoice-7781.pdf",
-            new: Some("20251020 Hetzner Online AP 38,56.pdf"),
+            new: Some("20251020 Proseware Hosting AP USD 38.56.pdf"),
             tier: Some(Tier::Text),
             quality: 0.91,
             enrich: None,
-            learn: alias("Hetzner Online", "HETZNER ONLINE GMBH"),
+            learn: alias("Proseware Hosting", "PROSEWARE HOSTING LLC"),
             warnings: &[],
             error: None,
-            fields: f("20.10.2025", "HETZNER ONLINE GMBH", "AP", "38,56"),
+            fields: inv(
+                "20.10.2025",
+                "PROSEWARE HOSTING LLC",
+                "AP",
+                "38.56",
+                "USD",
+                "38.56",
+            ),
         },
         Spec {
-            old: "doc00123.pdf",
-            new: Some("20251029 A1 Telekom Austria AP 45,00.pdf"),
+            old: "facture_0193.pdf",
+            new: Some("20251029 Lumière Papeterie AP EUR 45.00.pdf"),
             tier: Some(Tier::Ocr),
             quality: 0.71,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("29.10.2025", "A1 Telekom Austria", "AP", "45,00"),
+            fields: inv(
+                "29.10.2025",
+                "Lumière Papeterie",
+                "AP",
+                "45,00",
+                "EUR",
+                "45.00",
+            ),
         },
         Spec {
-            old: "doc00124.pdf",
-            new: Some("20251030 Würth Delivery note.pdf"),
+            old: "Rechnung_118.pdf",
+            new: Some("20251030 Keller Werkzeuge AP EUR 1234.56.pdf"),
             tier: Some(Tier::Text),
             quality: 0.88,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("30.10.2025", "Würth", "Delivery note", ""),
+            fields: inv(
+                "30.10.2025",
+                "Keller Werkzeuge",
+                "AP",
+                "1.234,56",
+                "EUR",
+                "1234.56",
+            ),
         },
         Spec {
-            old: "AR-2025-114.pdf",
-            new: Some("20251102 Müller Bau AR 1.234,56.pdf"),
+            old: "INV-2025-114.pdf",
+            new: Some("20251102 Tailspin Toys AR GBP 4258.80.pdf"),
             tier: Some(Tier::Text),
             quality: 0.99,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("02.11.2025", "Müller Bau", "AR", "1.234,56"),
+            fields: inv(
+                "02.11.2025",
+                "Tailspin Toys",
+                "AR",
+                "4,258.80",
+                "GBP",
+                "4258.80",
+            ),
         },
         Spec {
-            old: "statement_oct.pdf",
-            new: Some("20251031 Erste Bank Statement.pdf"),
+            old: "Statement_Oct.pdf",
+            new: Some("20251031 Woodgrove Bank Statement.pdf"),
             tier: Some(Tier::Ocr),
             quality: 0.58,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("31.10.2025", "Erste Bank", "Statement", ""),
+            fields: f("31.10.2025", "Woodgrove Bank", "Statement", ""),
         },
         Spec {
             old: "scan_0042.pdf",
-            new: Some("20251104 IKEA AP 249,00.pdf"),
+            new: Some("20251104 Fourth Coffee AP USD 89.00.pdf"),
             tier: Some(Tier::Text),
             quality: 0.93,
             enrich: None,
-            learn: new_entry("IKEA", false),
+            learn: new_entry("Fourth Coffee", false),
             warnings: &[],
             error: None,
-            fields: f("04.11.2025", "IKEA", "AP", "249,00"),
+            fields: inv("04.11.2025", "Fourth Coffee", "AP", "89.00", "USD", "89.00"),
         },
         Spec {
-            old: "Kontoauszug_11.pdf",
-            new: Some("20251105 Raiffeisen Statement.pdf"),
+            old: "letter_2025-11-05.pdf",
+            new: Some("20251105 Adventure Works Letter.pdf"),
             tier: Some(Tier::Text),
             quality: 0.90,
             enrich: None,
             learn: None,
             warnings: &[],
             error: None,
-            fields: f("05.11.2025", "Raiffeisen", "Statement", ""),
+            fields: f("05.11.2025", "Adventure Works", "Letter", ""),
         },
     ]
 }
 
-const DEMO_TEXT: &str = "Telekom Deutschland GmbH · Landgrabenweg 151 · 53227 Bonn\nRechnung Nr. 4711 0815 2025\nRechnungsdatum 28.10.25    Fällig am 01.11.25\nKundennummer 12 345 678 9\nLeistungszeitraum 01.10.2025 – 31.10.2025\nMagentaZuhause L                         44,95\nMagentaTV Smart                           10,04\nGesamtbetrag inkl. 19 % USt.             54,99 EUR\nZahlbar per Lastschrift. Vielen Dank für Ihren Auftrag.\nSEPA-Mandatsreferenz 98765-43210";
+/// Source text of the review row (`invoice (2).pdf`): an English invoice
+/// whose total carries no currency (hence the warning).
+const DEMO_TEXT: &str = "Contoso Telecom Ltd · 12 Harbour Street · Bristol BS1 4XY\nInvoice No. 4711-0815-2025\nInvoice date 28/10/2025    Due 11/11/2025\nAccount number 12 345 678 9\nBilling period 01/10/2025 – 31/10/2025\nFibre Broadband 500                      44.95\nTV Essentials                            10.04\nTotal incl. 20 % VAT                     54.99\nPaid by Direct Debit. Thank you for your business.\nDirect Debit reference 98765-43210";
+
+/// A French and a German invoice (multi-language reading).
+const FACTURE_TEXT: &str = "Lumière Papeterie SARL · 8 rue des Lilas · 69002 Lyon\nFacture n° FA-2025-0193\nDate de facture 29/10/2025\nPapier recyclé A4, 10 ramettes            37,50\nTVA 20 %                                   7,50\nTotal TTC                            45,00 EUR\nPaiement à 30 jours. Merci de votre confiance.";
+const RECHNUNG_TEXT: &str = "Keller Werkzeuge GmbH & Co. KG · Industriestraße 4 · 70565 Stuttgart\nRechnung Nr. 2025-118\nRechnungsdatum 30.10.2025\nAkku-Bohrschrauber, 4 Stück           1.037,44\nUSt. 19 %                               197,12\nGesamtbetrag                         1.234,56 EUR\nZahlbar innerhalb von 14 Tagen ohne Abzug.";
 
 fn cand(name: &str, score: f32) -> MatchCandidate {
     MatchCandidate {
@@ -223,21 +283,27 @@ fn evidence(
             MatchOutcome::Alias,
             0.95,
             Some(">=0.92"),
-            vec![cand(canonical, 0.95), cand("Hetzner Cloud", 0.71)],
+            vec![cand(canonical, 0.95), cand("Proseware Cloud", 0.71)],
         ),
         Some(LearnAction::NewEntry { review: true, .. }) => (
             MatchOutcome::Review,
             0.83,
             Some("0.75-0.92"),
-            vec![cand("Telekom Austria", 0.83), cand("Deutsche Post", 0.41)],
+            vec![cand("Contoso Mobile", 0.83), cand("Tailspin Toys", 0.41)],
         ),
         Some(LearnAction::NewEntry { .. }) => (
             MatchOutcome::New,
             0.38,
             Some("<0.75"),
-            vec![cand("Bauhaus", 0.38)],
+            vec![cand("Fabrikam Energy", 0.38)],
         ),
         None => (MatchOutcome::Known, 1.0, None, vec![cand(company, 1.0)]),
+    };
+    // The demo config uses the AI decider; on the review row it gave no
+    // verdict (a decider that is off would not explain the flag as well).
+    let decided_by = match learn {
+        Some(LearnAction::NewEntry { review: true, .. }) => DecidedBy::Ai,
+        _ => DecidedBy::None,
     };
     CompanyMatch {
         extracted: raw.clone(),
@@ -246,30 +312,29 @@ fn evidence(
         score: Some(score),
         band: band.map(str::to_string),
         candidates,
-        decided_by: DecidedBy::None,
+        decided_by,
     }
 }
 
 /// Source text matching each row's fields (detail extraction well).
 fn page_text(old: &str, fields: &Map<String, Value>, quality: f64) -> Vec<String> {
-    if old == "Rechnung (2).pdf" {
-        return vec![DEMO_TEXT.to_string(), "Seite 2 von 2".into()];
+    match old {
+        "invoice (2).pdf" => return vec![DEMO_TEXT.to_string(), "Page 2 of 2".into()],
+        "facture_0193.pdf" => return vec![FACTURE_TEXT.to_string()],
+        "Rechnung_118.pdf" => return vec![RECHNUNG_TEXT.to_string()],
+        _ => {}
     }
     let g = |k: &str| fields.get(k).and_then(Value::as_str).unwrap_or("");
-    let (company, date, ty, desc) = (
-        g("company_name"),
-        g("document_date"),
-        g("document_type"),
-        g("description"),
-    );
+    let (company, date, ty) = (g("company_name"), g("document_date"), g("document_type"));
     let mut lines = vec![company.to_string()];
     match ty {
         "AP" | "AR" => {
-            lines.push(format!("Invoice / Rechnung · Date {date}"));
+            let total = format!("{} {}", g("total_amount"), g("currency"));
+            lines.push(format!("Invoice · Date {date}"));
             lines.push(format!("Invoice no. {}", 40_000 + old.len() * 137));
             lines.push(format!("{:<24}{}", "Item", "Amount"));
-            lines.push(format!("{:<24}{desc}", "Goods and services"));
-            lines.push(format!("{:<24}{desc} EUR", "Total incl. VAT"));
+            lines.push(format!("{:<24}{}", "Goods and services", g("total_amount")));
+            lines.push(format!("{:<24}{}", "Total incl. VAT", total.trim()));
         }
         other => {
             lines.push(format!("{other} · {date}"));
@@ -360,6 +425,8 @@ pub fn config() -> ConfigState {
         ai.insert("api_key".into(), json!("sk-demo"));
         ai.insert("model".into(), json!("gpt-6-luna"));
     }
+    // Our own (fictional) company, under both of its spellings.
+    tree["company"]["names"] = json!(["Brightwater Design Ltd", "Brightwater Design"]);
     let settings = autorename_core::config::settings(&tree, None).ok();
     ConfigState {
         location: None,
@@ -442,55 +509,55 @@ pub fn companies_db() -> NameDb {
         field: autorename_core::harmonize::COMPANY_FIELD.into(),
         entries: vec![
             entry(
-                "Amazon",
-                &["AMAZON EU S.A R.L.", "Amazon.de"],
+                "Northwind Traders",
+                &["NORTHWIND TRADERS INC.", "Northwind Traders Inc"],
                 &[],
                 false,
                 None,
                 false,
             ),
             entry(
-                "Hetzner Online",
+                "Proseware Hosting",
                 &[],
-                &["HETZNER ONLINE GMBH"],
+                &["PROSEWARE HOSTING LLC"],
                 true,
                 Some("2025-10-20"),
                 false,
             ),
             entry(
-                "Telekom Deutschland",
+                "Contoso Telecom",
                 &[],
-                &["TELEKOM DEUTSCHLAND GMBH"],
+                &["CONTOSO TELECOM LTD"],
                 true,
                 Some("2025-10-28"),
                 true,
             ),
             entry(
-                "Telekom Austria",
-                &["A1 Telekom Austria"],
+                "Contoso Mobile",
+                &["Contoso Mobile Networks"],
                 &[],
                 false,
                 None,
                 false,
             ),
             entry(
-                "Müller Bau",
+                "Tailspin Toys",
                 &[],
-                &["Mueller Bau GmbH", "MÜLLER BAU"],
+                &["Tailspin Toys Ltd", "TAILSPIN TOYS"],
                 true,
                 Some("2025-11-02"),
                 true,
             ),
             entry(
-                "Würth",
+                "Keller Werkzeuge",
                 &[],
-                &["Adolf Würth GmbH & Co. KG"],
+                &["Keller Werkzeuge GmbH & Co. KG"],
                 true,
                 Some("2025-10-30"),
                 false,
             ),
-            entry("Stadtwerke München", &["SWM"], &[], false, None, false),
-            entry("Erste Bank", &[], &[], true, Some("2025-10-31"), true),
+            entry("Fabrikam Energy", &["Fabrikam"], &[], false, None, false),
+            entry("Woodgrove Bank", &[], &[], true, Some("2025-10-31"), true),
         ],
     }
 }
@@ -583,6 +650,28 @@ pub fn settings_model(section: usize) -> Model {
     m
 }
 
+/// Saved offline mode with Ollama on this computer: Processing shows the
+/// local provider, the header the passive Offline badge.
+pub fn settings_offline_model() -> Model {
+    let mut tree = config().tree.unwrap_or_default();
+    tree["privacy"] = json!("offline");
+    tree["ai"]["provider"] = json!("ollama");
+    tree["ai"]["model"] = json!("gemma4");
+    tree["ai"]["api_key"] = json!("");
+    let mut cfg = config();
+    cfg.settings = autorename_core::config::settings(&tree, None).ok();
+    cfg.tree = Some(tree);
+    cfg.env = Default::default();
+    cfg.raw_key = None;
+    let mut m = Model::new(cfg);
+    m.demo = true;
+    fill_pages(&mut m);
+    m.tab = Tab::Settings;
+    m.settings.section = page::PROCESSING;
+    m.settings.test = Some(Ok(186));
+    m
+}
+
 /// Processing with no models and AI vision off: "Scans can't be read".
 pub fn settings_ocr_unreadable_model() -> Model {
     let mut m = settings_model(page::PROCESSING);
@@ -654,7 +743,7 @@ pub fn companies_user_spelling_model() -> Model {
     if let Some(db) = m.companies.db.as_mut() {
         db.entries[0]
             .learned
-            .push("AMAZON EU S.A R.L. NIEDERLASSUNG DEUTSCHLAND".into());
+            .push("NORTHWIND TRADERS INTERNATIONAL DISTRIBUTION LIMITED".into());
     }
     m.companies.active = Some(0);
     m
@@ -663,7 +752,7 @@ pub fn companies_user_spelling_model() -> Model {
 pub fn merge_model() -> Model {
     let mut m = companies_model();
     m.companies.merge = Some(crate::gui::pages::MergeDialog {
-        from: "Telekom Deutschland".into(),
+        from: "Contoso Telecom".into(),
         search: String::new(),
         target: None,
     });
@@ -778,11 +867,11 @@ pub fn banners_model(tones: [Tone; 2]) -> Model {
 /// Inline edit with a valid name (helper shows the original name).
 pub fn valid_edit_model() -> Model {
     let mut m = preview_model();
-    m.editing = Some((1, "20251028 Telekom Deutschland AP 54,99 Oktober".into()));
+    m.editing = Some((1, "20251028 Contoso Telecom AP 54.99 October".into()));
     m
 }
 
-/// Bauhaus (vision, warning) selected: details panel shows lower sections.
+/// Globex Hardware (vision, warning) selected: details panel shows lower sections.
 pub fn warning_detail_model() -> Model {
     let mut m = preview_details_model();
     m.active = Some(3);
@@ -809,7 +898,7 @@ pub fn preview_details_model() -> Model {
 /// Inline edit with a collision helper (row grows to 72).
 pub fn invalid_edit_model() -> Model {
     let mut m = preview_model();
-    m.editing = Some((1, "20251103 Amazon AP 12,13".into()));
+    m.editing = Some((1, "20251103 Northwind Traders AP USD 1249.00".into()));
     m
 }
 
@@ -819,8 +908,8 @@ pub fn preview_model() -> Model {
     m.demo = true;
     m.meta = Some(meta());
     m.rows = items().into_iter().map(Row::from_item).collect();
-    // AR-2025-114: user-edited name; statement_oct: excluded.
-    m.rows[8].edited = Some("20251102 Müller Bau AR 1.234,56 Anzahlung.pdf".into());
+    // INV-2025-114: user-edited name; Statement_Oct: excluded.
+    m.rows[8].edited = Some("20251102 Tailspin Toys AR GBP 4258.80 Deposit.pdf".into());
     m.rows[9].checked = false;
     m.active = Some(1);
     m.stamp_current();

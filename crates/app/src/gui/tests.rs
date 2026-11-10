@@ -91,7 +91,7 @@ fn screens() -> Vec<Screen> {
         ("companies_merge_picked", || {
             let mut m = demo::merge_model();
             if let Some(md) = m.companies.merge.as_mut() {
-                md.target = Some("Telekom Austria".into());
+                md.target = Some("Contoso Mobile".into());
             }
             m
         }),
@@ -124,27 +124,48 @@ fn snapshots() {
     results.unwrap();
 }
 
-/// README screenshots (`docs/images/gui-preview-{light,dark}.png`): the
-/// simple preview at 1280 × 800, details closed. Refreshed with the other
-/// snapshots (`UPDATE_SNAPSHOTS=force`), so the README never shows an old UI.
+/// The preview list trimmed to 11 rows: they fill the 1280 × 800 list
+/// exactly, so no row is cut above the action bar.
+fn readme_preview() -> Model {
+    let mut m = demo::preview_model();
+    m.rows.pop();
+    m
+}
+
+/// README/guide screenshots (`docs/images/gui-<screen>-<light|dark>.png`)
+/// at 1280 × 800. Refreshed with the other snapshots
+/// (`UPDATE_SNAPSHOTS=force`), so the docs never show an old UI.
+fn readme_screens() -> Vec<Screen> {
+    vec![
+        ("preview", readme_preview),
+        ("details", || {
+            let mut m = readme_preview();
+            m.detail_visible = true;
+            m
+        }),
+        ("names", demo::companies_model),
+        ("settings", || demo::settings_model(page::NAMING)),
+        ("offline", demo::settings_offline_model),
+        ("done", || {
+            let mut m = readme_preview();
+            let report = demo::simulate_apply(&m);
+            m.apply_report(report);
+            m
+        }),
+    ]
+}
+
 #[test]
 fn readme_screenshots() {
     let _gpu = gpu_lock();
     let mut results = SnapshotResults::new();
-    for dark in [false, true] {
-        // 11 rows fill the list exactly: no row cut above the action bar.
-        let mut h = harness(
-            || {
-                let mut m = demo::preview_model();
-                m.rows.pop();
-                m
-            },
-            SIZES[0],
-            dark,
-        );
-        let opts = SnapshotOptions::new().output_path("../../docs/images");
-        let name = format!("gui-preview-{}", if dark { "dark" } else { "light" });
-        results.add(h.try_snapshot_options(name, &opts));
+    for (screen, model) in readme_screens() {
+        for dark in [false, true] {
+            let mut h = harness(model, SIZES[0], dark);
+            let opts = SnapshotOptions::new().output_path("../../docs/images");
+            let name = format!("gui-{screen}-{}", if dark { "dark" } else { "light" });
+            results.add(h.try_snapshot_options(name, &opts));
+        }
     }
     results.unwrap();
 }
@@ -217,7 +238,7 @@ fn focus_and_hover_snapshots() {
     for size in SIZES {
         for dark in [false, true] {
             let mut h = harness(demo::preview_model, size, dark);
-            tab_to(&mut h, |l| l.contains("Rechnung (2).pdf"));
+            tab_to(&mut h, |l| l.contains("invoice (2).pdf"));
             results.add(h.try_snapshot(snap_name("focus_row", size, dark)));
             tab_to(&mut h, |l| l == "Rename 10 files");
             results.add(h.try_snapshot(snap_name("focus_rename", size, dark)));
@@ -230,7 +251,7 @@ fn focus_and_hover_snapshots() {
             results.add(h.try_snapshot(snap_name("hover_row", size, dark)));
             // First and last row focus (ring stays inside the scroll clip).
             let mut h = harness(demo::preview_model, size, dark);
-            tab_to(&mut h, |l| l.contains("Rechnung (2).pdf"));
+            tab_to(&mut h, |l| l.contains("invoice (2).pdf"));
             h.key_press(Key::Home);
             h.run();
             results.add(h.try_snapshot(snap_name("focus_first_row", size, dark)));
@@ -451,15 +472,15 @@ fn accessibility_labels() {
     let _gpu = gpu_lock();
     let h = harness(demo::preview_details_model, SIZES[0], false);
     let row = h.get_by_label_contains(
-        "scan_0041.pdf, will be renamed to 20251103 Amazon AP 12,13.pdf, text extraction, metadata will be written, included",
+        "scan_0041.pdf, will be renamed to 20251103 Northwind Traders AP USD 1249.00.pdf, text extraction, metadata will be written, included",
     );
     assert_eq!(row.accesskit_node().role(), Role::ListItem);
     h.get_by_label_contains("broken.pdf, error:");
     h.get_by_label_contains(
-        "Vertrag_signed.pdf, will be renamed to 20250901 Stadtwerke München Contract.pdf, text extraction, metadata skipped, signed PDF",
+        "Contract_signed.pdf, will be renamed to 20250901 Fabrikam Energy Contract.pdf, text extraction, metadata skipped, signed PDF",
     );
     let excl = h
-        .get_by_label_contains("statement_oct.pdf, will be renamed to")
+        .get_by_label_contains("Statement_Oct.pdf, will be renamed to")
         .accesskit_node()
         .label()
         .unwrap_or_default();
@@ -576,14 +597,14 @@ fn keyboard_only_flow_from_first_run() {
     h.key_press(Key::ArrowDown);
     h.run();
     assert_eq!(h.state().m.active, Some(1));
-    assert!(focused_label(&h).contains("Rechnung (2).pdf"));
+    assert!(focused_label(&h).contains("invoice (2).pdf"));
     h.key_press(Key::F2);
     h.run();
     assert!(h.state().m.editing.is_some());
     for _ in 0..12 {
         h.key_press(Key::Backspace);
     }
-    for c in " Telekom".chars() {
+    for c in " October".chars() {
         h.event(egui::Event::Text(c.to_string()));
     }
     h.run();
@@ -591,7 +612,7 @@ fn keyboard_only_flow_from_first_run() {
     h.run();
     assert!(h.state().m.editing.is_none(), "Enter commits");
     let edited = h.state().m.rows[1].edited.clone().unwrap_or_default();
-    assert!(edited.ends_with("Telekom.pdf"), "{edited}");
+    assert!(edited.ends_with("October.pdf"), "{edited}");
     h.key_press(Key::ArrowUp);
     h.run();
     h.key_press(Key::Space);
@@ -735,17 +756,16 @@ fn copy_lint() {
                 let lower_rest = w.chars().skip(1).all(|c| !c.is_uppercase());
                 let sentence_start = prev.ends_with('.') || prev.ends_with(':');
                 let proper = [
-                    "Telekom",
-                    "Deutschland",
-                    "Austria",
-                    "Amazon",
-                    "Hetzner",
-                    "Online",
-                    "Müller",
-                    "Bau",
+                    "Contoso",
+                    "Mobile",
+                    "Telecom",
+                    "Northwind",
+                    "Traders",
+                    "Proseware",
+                    "Hosting",
+                    "Tailspin",
+                    "Toys",
                     "Sponsors",
-                    // File names in row-action labels ("Open Rechnung (2).pdf").
-                    "Rechnung",
                 ]
                 .iter()
                 .any(|p| w.trim_matches(|c: char| !c.is_alphanumeric()) == *p);
@@ -1561,7 +1581,7 @@ fn row_actions_open_and_edit_name() {
     let _gpu = gpu_lock();
     let mut h = harness(demo::preview_model, SIZES[0], false);
     assert!(
-        h.query_by_label("Open Rechnung (2).pdf").is_some(),
+        h.query_by_label("Open invoice (2).pdf").is_some(),
         "needs a look"
     );
     assert!(
@@ -1577,16 +1597,16 @@ fn row_actions_open_and_edit_name() {
         "not active"
     );
     // Open goes through the worker (no launch on the UI thread).
-    h.get_by_label("Open Rechnung (2).pdf").click();
+    h.get_by_label("Open invoice (2).pdf").click();
     h.run();
     let src = h.state().m.rows[1].source.clone();
     assert_eq!(h.state().opened(), std::slice::from_ref(&src));
     // O on the active row opens it too (the button is not a Tab stop).
-    tab_to(&mut h, |l| l.contains("Rechnung (2).pdf, "));
+    tab_to(&mut h, |l| l.contains("invoice (2).pdf, "));
     h.key_press(Key::O);
     h.run();
     assert_eq!(h.state().opened(), [src.clone(), src]);
-    h.get_by_label("Edit name of Rechnung (2).pdf").click();
+    h.get_by_label("Edit name of invoice (2).pdf").click();
     h.run();
     assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(1));
 }
@@ -1600,7 +1620,7 @@ fn row_actions_with_equal_names_in_two_folders() {
         || {
             let mut m = demo::preview_model();
             let mut twin = m.rows[1].clone();
-            twin.source = std::path::PathBuf::from("/home/demo/Other/Rechnung (2).pdf");
+            twin.source = std::path::PathBuf::from("/home/demo/Other/invoice (2).pdf");
             m.rows.insert(2, twin);
             m
         },
@@ -1608,30 +1628,27 @@ fn row_actions_with_equal_names_in_two_folders() {
         false,
     );
     h.run();
-    assert_eq!(h.query_all_by_label("Open Rechnung (2).pdf").count(), 2);
+    assert_eq!(h.query_all_by_label("Open invoice (2).pdf").count(), 2);
     let r = h
-        .query_all_by_label("Open Rechnung (2).pdf")
+        .query_all_by_label("Open invoice (2).pdf")
         .nth(1)
         .unwrap()
         .rect();
     h.hover_at(r.center());
     h.run();
     assert_eq!(
-        h.query_all_by_label("Edit name of Rechnung (2).pdf")
-            .count(),
+        h.query_all_by_label("Edit name of invoice (2).pdf").count(),
         2,
         "active and hovered twin"
     );
-    h.query_all_by_label("Open Rechnung (2).pdf")
+    h.query_all_by_label("Open invoice (2).pdf")
         .nth(1)
         .unwrap()
         .click();
     h.run();
     assert_eq!(
         h.state().opened(),
-        [std::path::PathBuf::from(
-            "/home/demo/Other/Rechnung (2).pdf"
-        )]
+        [std::path::PathBuf::from("/home/demo/Other/invoice (2).pdf")]
     );
 }
 
@@ -1641,7 +1658,7 @@ fn open_failure_shows_a_banner() {
     let _gpu = gpu_lock();
     let mut h = harness(demo::preview_model, SIZES[0], false);
     h.state().worker_send(super::worker::Msg::OpenFailed(
-        std::path::PathBuf::from("/x/Rechnung (2).pdf"),
+        std::path::PathBuf::from("/x/invoice (2).pdf"),
         "No such program".into(),
     ));
     h.run();
@@ -1650,7 +1667,7 @@ fn open_failure_shows_a_banner() {
             .m
             .banners
             .iter()
-            .any(|b| b.title == "Couldn't open Rechnung (2).pdf.")
+            .any(|b| b.title == "Couldn't open invoice (2).pdf.")
     );
 }
 
@@ -1662,7 +1679,7 @@ fn long_merge_model() -> Model {
         && let Some(e) = db
             .entries
             .iter_mut()
-            .find(|e| e.canonical == "Telekom Austria")
+            .find(|e| e.canonical == "Contoso Mobile")
     {
         e.canonical = LONG_NAME.into();
     }
@@ -1694,10 +1711,10 @@ fn merge_needs_an_explicit_target() {
     let _gpu = gpu_lock();
     let mut h = harness(demo::merge_model, SIZES[1], false);
     assert!(h.get_by_label("Merge").accesskit_node().is_disabled());
-    h.get_by_label("Telekom Austria").click();
+    h.get_by_label("Contoso Mobile").click();
     h.run();
     assert!(
-        !h.get_by_label("Merge into Telekom Austria")
+        !h.get_by_label("Merge into Contoso Mobile")
             .accesskit_node()
             .is_disabled()
     );
@@ -2065,7 +2082,7 @@ fn naming_samples_and_no_matching_caption() {
     let mut f = m.settings.form.clone();
     assert_eq!(
         sample_name("business", &profiles["business"], &f),
-        "20251103 Amazon AP EUR 12.13.pdf"
+        "20251103 Northwind AP EUR 12.13.pdf"
     );
     f.date_format = "%Y-%m-%d".into();
     f.amount_format = "{amount} {currency}".into();
@@ -2073,7 +2090,7 @@ fn naming_samples_and_no_matching_caption() {
     f.incoming = "ER".into();
     assert_eq!(
         sample_name("business", &profiles["business"], &f),
-        "2025-11-03 Amazon ER 12,13 EUR.pdf"
+        "2025-11-03 Northwind ER 12,13 EUR.pdf"
     );
 
     let _gpu = gpu_lock();
@@ -2349,12 +2366,15 @@ fn company_provenance_filters_do_not_overlap() {
     use super::pages::CompanyFilter;
     let m = demo::companies_user_spelling_model();
     let mut c = m.companies;
-    let amazon = 0;
+    let northwind = 0;
     c.filter = CompanyFilter::Learned;
-    assert!(!c.visible().contains(&amazon), "not 'Added automatically'");
+    assert!(
+        !c.visible().contains(&northwind),
+        "not 'Added automatically'"
+    );
     let auto = c.visible();
     c.filter = CompanyFilter::Manual;
-    assert!(c.visible().contains(&amazon));
+    assert!(c.visible().contains(&northwind));
     assert!(c.visible().iter().all(|i| !auto.contains(i)), "no overlap");
 }
 
@@ -2931,9 +2951,9 @@ fn failure_banner_points_to_history_when_the_journal_is_unreadable() {
 
 /// Starts the inline edit of row 1 with the mouse (hover → pencil).
 fn mouse_edit_row1(h: &mut Harness<'_, App>) {
-    h.get_by_label_contains("Rechnung (2).pdf, ").hover();
+    h.get_by_label_contains("invoice (2).pdf, ").hover();
     h.run();
-    h.get_by_label("Edit name of Rechnung (2).pdf").click();
+    h.get_by_label("Edit name of invoice (2).pdf").click();
     h.run();
     assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(1));
     assert_eq!(focused_label(h), "Edit proposed name", "field focused once");
@@ -3146,7 +3166,7 @@ fn custom_profile_renders_generically() {
     assert_eq!(template_caption(r), "Date, company, invoice ID");
     assert_eq!(
         sample_name("receipts", r, &m.settings.form),
-        "20251103 Amazon Invoice ID.pdf"
+        "20251103 Northwind Invoice ID.pdf"
     );
     assert_eq!(
         Uses::of(&tree, "receipts"),
@@ -3161,7 +3181,7 @@ fn custom_profile_renders_generically() {
     for size in SIZES {
         for dark in [false, true] {
             let mut h = harness(receipts_model, size, dark);
-            h.get_by_label("Receipts profile, for example 20251103 Amazon Invoice ID.pdf");
+            h.get_by_label("Receipts profile, for example 20251103 Northwind Invoice ID.pdf");
             assert!(h.query_by_label_contains("Your company").is_none());
             assert!(h.query_by_label_contains("Amount format").is_none());
             assert!(h.query_by_label("Name matching").is_none(), "no name tab");

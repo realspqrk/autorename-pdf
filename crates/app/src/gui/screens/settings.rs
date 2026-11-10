@@ -1491,7 +1491,7 @@ pub fn sample_name(_id: &str, prof: &Profile, f: &SettingsForm) -> String {
     let sample = |k: &str| -> String {
         match k {
             "document_date" => "03.11.2025".into(),
-            "company_name" | "issuer" => "Amazon".into(),
+            "company_name" | "issuer" => "Northwind".into(),
             "recipient" => "Your company".into(),
             "document_type" => f.incoming.trim().to_string(),
             "description" => "Notes".into(),
