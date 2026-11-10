@@ -112,22 +112,22 @@ Every spelling of the same company gets one canonical form in your file names. E
   <img src="images/gui-names-light.png" alt="The Name matching tab: company names with their spellings, names to review, and Merge and Rename actions">
 </picture>
 
-Walkthrough on the [demo](../examples/demo/) (real output, OpenAI):
+Walkthrough on the [demo](../examples/demo/) (real output, OpenAI; the `ocr_models_missing` lines left out):
 
 ```console
-$ autorename-pdf rename demo/acme-invoice.pdf
-  acme-invoice.pdf  →  20240315 ACME Corporation AP EUR 4,258.80.pdf  enriched · new entry
+$ autorename-pdf rename demo/initech-invoice.pdf
+  initech-invoice.pdf  →  20240628 Initech Solutions AP EUR 237.50.pdf  enriched · new entry
 Done: 1 renamed, 1 enriched, 1 name learned  (revert: autorename-pdf undo)
 
-$ autorename-pdf names rename "ACME Corporation" ACME     # your spelling from now on
+$ autorename-pdf names rename "Initech Solutions" "Initech Corp"   # your spelling from now on
 
 $ autorename-pdf undo
-  20240315 ACME Corporation AP EUR 4,258.80.pdf  →  acme-invoice.pdf
-  ACME Corporation: kept: renamed by user (now "ACME")
-Undo: 1 restored, 0 failed, 1 metadata reverted, 0 names forgotten  (batch 20261109T072003-038a14)
+  20240628 Initech Solutions AP EUR 237.50.pdf  →  initech-invoice.pdf
+  Initech Solutions: kept: merged into "Initech Corp" by user
+Undo: 1 restored, 0 failed, 1 metadata reverted, 0 names forgotten  (batch 20261110T100859-2abec9)
 
-$ autorename-pdf rename --dry-run demo/acme-invoice.pdf
-  acme-invoice.pdf  →  20240315 ACME AP EUR 4,258.80.pdf
+$ autorename-pdf rename --dry-run demo/initech-invoice.pdf
+  initech-invoice.pdf  →  20240628 Initech Corp AP EUR 237.50.pdf
 Dry run: 1 to rename (nothing changed)
 ```
 

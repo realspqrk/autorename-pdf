@@ -45,9 +45,11 @@ pub enum Action {
     /// Remove a row from the plan, not from disk (Delete, row menu).
     RemoveRow(usize),
     StartEdit(usize),
-    /// Commit the inline edit if valid; `refocus` returns focus to the row
-    /// (Enter, Save); after a click away focus stays where it went.
+    /// Commit the inline edit of `row` if it is still the open one and
+    /// valid; `refocus` returns focus to the row (Enter, Save); after a
+    /// click away focus stays where it went.
     CommitEdit {
+        row: usize,
         refocus: bool,
     },
     CancelEdit,

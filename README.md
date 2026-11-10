@@ -1,7 +1,7 @@
 <div align="center">
   <h1>AutoRename-PDF</h1>
   <p><b>Rename PDFs from their content with AI and local OCR.</b><br>
-  <code>acme-invoice.pdf</code> → <code>20240315 ACME Corporation AP EUR 4,258.80.pdf</code></p>
+  <code>acme-invoice.pdf</code> → <code>20240315 ACME AP EUR 4258.80.pdf</code></p>
   <p>
     <a href="https://github.com/realspqrk/autorename-pdf/releases"><img src="https://img.shields.io/github/v/release/realspqrk/autorename-pdf?include_prereleases" alt="GitHub Release"></a>
     <a href="https://github.com/realspqrk/autorename-pdf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/realspqrk/autorename-pdf" alt="MIT License"></a>
@@ -71,11 +71,11 @@ The examples use bash (Windows PowerShell setup: `autorename-pdf setup --help`).
 $ export OPENAI_API_KEY=sk-...
 $ autorename-pdf setup --provider openai --api-key-env OPENAI_API_KEY --company "Spqrk"
 $ autorename-pdf rename --dry-run demo          # preview; changes nothing
-  acme-invoice.pdf           →  20240315 ACME Corporation AP EUR 4,258.80.pdf
-  globex-letter.pdf          →  20250122 Globex Corporation Letter.pdf
+  acme-invoice.pdf           →  20240315 ACME AP EUR 4258.80.pdf
+  globex-letter.pdf          →  20250122 Globex Letter.pdf
   ...
-  invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10,700.00.pdf
-  rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1.320,00.pdf
+  invoice-to-wayne.pdf       →  20250310 Wayne Enterprises AR EUR 10700.00.pdf
+  rechnung-mustermann.pdf    →  20250208 Mustermann Consulting AP EUR 1320.00.pdf
   ...
 Dry run: 7 to rename (nothing changed)
 $ autorename-pdf rename demo                    # rename for real (analyzes again;

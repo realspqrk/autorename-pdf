@@ -386,10 +386,16 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
         if esc || cancelled {
             acts.push(Action::CancelEdit);
         } else if saved {
-            acts.push(Action::CommitEdit { refocus: true });
+            acts.push(Action::CommitEdit {
+                row: i,
+                refocus: true,
+            });
         } else if enter && resp.lost_focus() {
             if err.is_none() {
-                acts.push(Action::CommitEdit { refocus: true });
+                acts.push(Action::CommitEdit {
+                    row: i,
+                    refocus: true,
+                });
             } else {
                 // Keyboard: an invalid name keeps the caret in the field.
                 resp.request_focus();
@@ -397,7 +403,10 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
         } else if resp.lost_focus() {
             // Click away (or Tab): commit when valid; an invalid name stays
             // in edit with its error, unfocused.
-            acts.push(Action::CommitEdit { refocus: false });
+            acts.push(Action::CommitEdit {
+                row: i,
+                refocus: false,
+            });
         }
     });
 }

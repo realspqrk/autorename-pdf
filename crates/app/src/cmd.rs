@@ -93,7 +93,7 @@ pub(crate) fn models_hint(out: &Out, offline: bool, pack: &ocr::Pack) -> String 
         )
     } else {
         format!(
-            "Run `{}` (~{} MB) to read scans on this computer; until then they use AI image reading when it is on.",
+            "Run `{}` (~{} MB) to read scans and logos on this computer; until then scans use AI image reading when it is on.",
             out.command(&["models", "fetch", pack.id]),
             pack.total_size().div_ceil(1_000_000)
         )
