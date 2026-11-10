@@ -702,30 +702,49 @@ fn assess_enrich(path: &Path, enabled: bool) -> EnrichPlan {
     }
 }
 
+/// Titles before a person's name (`Hr. Gerhard Petermeir`), ignored when
+/// comparing word sets.
+const HONORIFICS: [&str; 14] = [
+    "mr", "mrs", "ms", "mx", "dr", "prof", "hr", "herr", "frau", "fr", "mag", "ing", "dipl", "m",
+];
+
 /// Is `name` one of my company names (`mine`)? Company normalization (legal
 /// suffixes, case, punctuation ignored). `name` may list several parties
 /// (`Spqrk GmbH, Gerhard Petermeir`): the whole text and each part split at
 /// `,` `;` `/` or a line break count. A part matches one of my names when
 /// it normalizes the same, is a close spelling (similarity ≥
-/// [`harmonize::AUTO_ALIAS_THRESHOLD`]), or, for names of two or more words,
-/// contains all of its words in any order (`Hr. Petermeir Gerhard`).
+/// [`harmonize::AUTO_ALIAS_THRESHOLD`]), or has the same words in another
+/// order, titles aside (`Hr. Petermeir Gerhard`). Extra words never match:
+/// `Acme Services North` is not `Acme Services`.
 fn is_my_company(name: &str, mine: &[String]) -> bool {
-    let mine: Vec<String> = mine
+    fn words(n: &str) -> Vec<String> {
+        let mut w: Vec<String> = n
+            .split_whitespace()
+            .map(|t| t.trim_end_matches('.').to_string())
+            .filter(|t| !t.is_empty() && !HONORIFICS.contains(&t.as_str()))
+            .collect();
+        w.sort();
+        w
+    }
+    let mine: Vec<(String, Vec<String>)> = mine
         .iter()
         .map(|m| harmonize::normalize_company(m))
         .filter(|m| !m.is_empty())
+        .map(|m| {
+            let w = words(&m);
+            (m, w)
+        })
         .collect();
     std::iter::once(name)
         .chain(name.split([',', ';', '/', '\n']))
         .map(harmonize::normalize_company)
         .filter(|p| !p.is_empty())
         .any(|part| {
-            let words: Vec<&str> = part.split_whitespace().collect();
-            mine.iter().any(|m| {
+            let pw = words(&part);
+            mine.iter().any(|(m, mw)| {
                 part == *m
                     || harmonize::similarity(&part, m) >= harmonize::AUTO_ALIAS_THRESHOLD
-                    || (m.split_whitespace().count() > 1
-                        && m.split_whitespace().all(|w| words.contains(&w)))
+                    || (!mw.is_empty() && pw == *mw)
             })
         })
 }
@@ -829,7 +848,7 @@ pub fn derive_amount(
     if printed.is_empty() {
         return None;
     }
-    let amount = amount::normalize(&printed, sep).unwrap_or_else(|| printed.clone());
+    let amount = amount::normalize(&printed, sep, &currency).unwrap_or_else(|| printed.clone());
     let currency = match currency.as_str() {
         "" => amount::currency_in(&printed).unwrap_or("").to_string(),
         c => amount::currency_code(c),
@@ -2006,7 +2025,12 @@ mod tests {
         ] {
             assert!(is_my_company(printed, &mine), "{printed}");
         }
-        for printed in ["Gerhard Huber", "Petermeir Bau GmbH", "IT-Services Nord", ""] {
+        for printed in [
+            "Gerhard Huber",
+            "Petermeir Bau GmbH",
+            "IT-Services Nord",
+            "",
+        ] {
             assert!(!is_my_company(printed, &mine), "{printed}");
         }
     }

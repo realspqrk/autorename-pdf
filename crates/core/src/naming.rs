@@ -156,11 +156,11 @@ fn join_tokens(tokens: &[Token], values: &[(String, String)]) -> String {
     let mut out = String::new();
     let mut pending = String::new();
     let mut started = false;
-    for token in tokens {
+    for (i, token) in tokens.iter().enumerate() {
         match token {
             Token::Field(name) => {
                 let value = lookup(values, name);
-                if value.is_empty() {
+                if value.is_empty() || repeated_next(tokens, values, i, value) {
                     continue;
                 }
                 if started {
@@ -190,30 +190,34 @@ fn join_tokens(tokens: &[Token], values: &[(String, String)]) -> String {
     base.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// A field value that the next non-empty field in the template repeats at
-/// its start (`Invoice` + `Invoice 2024-11`, case-insensitive, whole words)
-/// is left out, so the name does not say it twice.
-fn drop_repeats(tokens: &[Token], values: &mut [(String, String)]) {
-    let order: Vec<usize> = tokens
-        .iter()
-        .filter_map(|t| match t {
-            Token::Field(n) => values.iter().position(|(k, _)| k == n),
-            Token::Literal(_) => None,
-        })
-        .filter(|&i| !values[i].1.is_empty())
-        .collect();
-    for pair in order.windows(2) {
-        let (cur, next) = (
-            values[pair[0]].1.to_lowercase(),
-            values[pair[1]].1.to_lowercase(),
-        );
-        let repeated = next
-            .strip_prefix(&cur)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '-', '_', ',']));
-        if repeated && pair[0] != pair[1] {
-            values[pair[0]].1.clear();
+/// The field value at token `i` is said again at the start of the next
+/// non-empty field (`Invoice` + `Invoice 2024-11`, case-insensitive, whole
+/// words) with only separators between them: that occurrence is left out
+/// (never for the same field written twice).
+fn repeated_next(tokens: &[Token], values: &[(String, String)], i: usize, value: &str) -> bool {
+    let cur = value.to_lowercase();
+    let Some(Token::Field(own)) = tokens.get(i) else {
+        return false;
+    };
+    for t in &tokens[i + 1..] {
+        match t {
+            Token::Literal(l) if is_separator_run(l) => {}
+            Token::Literal(_) => return false,
+            // A field written twice on purpose (`{title} - {title}`) stays.
+            Token::Field(n) if n == own => return false,
+            Token::Field(n) => {
+                let next = lookup(values, n);
+                if next.is_empty() {
+                    continue;
+                }
+                return next
+                    .to_lowercase()
+                    .strip_prefix(&cur)
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '-', '_', ',']));
+            }
         }
     }
+    false
 }
 
 /// Render `<basename>.pdf` for raw model `fields`. Pure; does not mutate input.
@@ -224,7 +228,6 @@ pub fn render_filename(
 ) -> String {
     let tokens = template_tokens(&profile.template);
     let mut values = prepare_values(profile, fields, date_format);
-    drop_repeats(&tokens, &mut values);
     let truncate = profile.truncate_field.as_str();
 
     let mut base = join_tokens(&tokens, &values);

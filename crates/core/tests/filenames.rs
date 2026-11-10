@@ -324,6 +324,31 @@ fn date_behavior_and_category_overlap() {
         ),
         "20260906 Hausübung Wiederholung.pdf"
     );
+    // Only across separators, and only that occurrence.
+    let overlay = |t: &str, cut: &str| Some(json!({"template": t, "truncate_field": cut}));
+    assert_eq!(
+        rendered(
+            &c,
+            "business",
+            json!({"document_type": "Invoice", "description": "Invoice 123"}),
+            overlay("{document_type} reference {description}", "description"),
+            None
+        ),
+        "Invoice reference Invoice 123.pdf"
+    );
+    assert_eq!(
+        rendered(
+            &c,
+            "business",
+            json!({"company_name": "ACME", "document_type": "ACME Invoice"}),
+            overlay(
+                "{company_name} - {document_type} - {company_name}",
+                "company_name"
+            ),
+            None
+        ),
+        "ACME Invoice - ACME.pdf"
+    );
     // Custom date format and NFC of composed values (test_document_processing).
     assert_eq!(
         rendered(
