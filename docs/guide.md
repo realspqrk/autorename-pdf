@@ -45,6 +45,13 @@ Then one AI request per document returns the fields of the profile. The app chec
 
 `autorename-pdf inspect file.pdf` shows the score of each page and which step would run.
 
+In the window, your company names, the document type codes, the date format and the decimal mark are under Settings > Naming:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/gui-settings-dark.png">
+  <img src="images/gui-settings-light.png" alt="Settings, Naming page: your company names one per line, document type codes, date format and decimal mark, with an example file name">
+</picture>
+
 ## Offline mode
 
 `privacy: offline` in the config (or `--offline` for one run) keeps every document on your computer or local network:
@@ -64,6 +71,11 @@ Checklist:
 4. Preview your files: `autorename-pdf rename --dry-run --jobs 1 ~/Private` (one file at a time keeps a CPU model responsive).
 
 Back to a cloud provider: `autorename-pdf setup --cloud --provider openai --api-key-env OPENAI_API_KEY` (offline mode is only ever left explicitly). Recipe: [examples/ollama-offline.yaml](../examples/ollama-offline.yaml). In the window: Settings > Processing > Privacy.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/gui-offline-dark.png">
+  <img src="images/gui-offline-light.png" alt="Settings, Processing page in offline mode: Ollama on this computer as the provider and the Offline badge in the header">
+</picture>
 
 ## Embedded data
 
@@ -94,6 +106,11 @@ Every spelling of the same company gets one canonical form in your file names. E
 - **Auto-learning** (on by default, `--no-learn` for one run): a similarity of 0.92 or more adds a learned alias; 0.75–0.92 asks a small AI decider (`harmonization.decider`); below that creates a new entry. Without a decider verdict an ambiguous name becomes a new entry flagged `review`, never a silent merge.
 - Learned names belong to the run's undo batch. `undo` removes them, but never an entry you renamed, merged or accepted. The whole lifecycle: `autorename-pdf names --help`.
 - In the window: the Name matching tab. On the command line: `names list | review | merge | rename | add` (`--field journal_name` picks another list).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/gui-names-dark.png">
+  <img src="images/gui-names-light.png" alt="The Name matching tab: company names with their spellings, names to review, and Merge and Rename actions">
+</picture>
 
 Walkthrough on the [demo](../examples/demo/) (real output, OpenAI):
 
