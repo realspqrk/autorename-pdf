@@ -53,8 +53,11 @@ config_version: 4
 ai: {provider: openai, api_key: "${OPENAI_API_KEY}"}   # model defaults per provider
 pdf: {ocr: auto, vision: auto, max_pages: 3}   # the defaults; shown for clarity
 ocr: {language: de, threads: 4}
-company: {name: Example GmbH}
+company: {names: [Example GmbH]}   # every name your invoices show, e.g. also your own
+output: {decimal_separator: ","}   # amounts as 12,13 (default 12.13)
 ```
+
+- `company.name` is now `company.names`, a list: add trading or old names and your own name so bills addressed to any of them count as yours. Amounts in names are written with one decimal mark (`output.decimal_separator`), whatever the PDF prints.
 
 ## Harmonization file (name lists)
 
