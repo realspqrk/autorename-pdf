@@ -702,7 +702,7 @@ fn assess_enrich(path: &Path, enabled: bool) -> EnrichPlan {
     }
 }
 
-/// Titles before a person's name (`Hr. Gerhard Petermeir`), ignored when
+/// Titles before a person's name (`Hr. Jane Doe`), ignored when
 /// comparing word sets.
 const HONORIFICS: [&str; 14] = [
     "mr", "mrs", "ms", "mx", "dr", "prof", "hr", "herr", "frau", "fr", "mag", "ing", "dipl", "m",
@@ -710,11 +710,11 @@ const HONORIFICS: [&str; 14] = [
 
 /// Is `name` one of my company names (`mine`)? Company normalization (legal
 /// suffixes, case, punctuation ignored). `name` may list several parties
-/// (`Spqrk GmbH, Gerhard Petermeir`): the whole text and each part split at
+/// (`Spqrk GmbH, Jane Doe`): the whole text and each part split at
 /// `,` `;` `/` or a line break count. A part matches one of my names when
 /// it normalizes the same, is a close spelling (similarity ≥
 /// [`harmonize::AUTO_ALIAS_THRESHOLD`]), or has the same words in another
-/// order, titles aside (`Hr. Petermeir Gerhard`). Extra words never match:
+/// order, titles aside (`Hr. Doe Jane`). Extra words never match:
 /// `Acme Services North` is not `Acme Services`.
 fn is_my_company(name: &str, mine: &[String]) -> bool {
     fn words(n: &str) -> Vec<String> {
@@ -2014,21 +2014,22 @@ mod tests {
 
     #[test]
     fn any_of_my_names_matches() {
-        let mine = ["SPQRK IT-Services".to_string(), "Gerhard Petermeir".into()];
+        let mine = ["Brightwater Design".to_string(), "Jane Doe".into()];
         for printed in [
-            "SPQRK IT-Services e.U.",
-            "Gerhard Petermeir",
-            "Petermeir Gerhard",
-            "Hr. Petermeir Gerhard",
-            "ACME GmbH, Gerhard Petermeir",
-            "SPQRK IT-Services; Accounts",
+            "Brightwater Design e.U.",
+            "Jane Doe",
+            "Doe Jane",
+            "Hr. Doe Jane",
+            "ACME GmbH, Jane Doe",
+            "Brightwater Design; Accounts",
         ] {
             assert!(is_my_company(printed, &mine), "{printed}");
         }
         for printed in [
-            "Gerhard Huber",
-            "Petermeir Bau GmbH",
-            "IT-Services Nord",
+            "Jane Smith",
+            "Doe Bau GmbH",
+            "Brightwater Design North",
+            "Global Brightwater Design",
             "",
         ] {
             assert!(!is_my_company(printed, &mine), "{printed}");
