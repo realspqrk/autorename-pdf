@@ -4,7 +4,7 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 ## TOC
 
-- [Next beta (4.0.0-beta.2)](#next-beta-400-beta2)
+- [After 4.0.0-beta.2](#after-400-beta2)
 - [Validation gaps](#validation-gaps)
 - [Scanner / image ingest](#scanner--image-ingest)
 - [Enrichment](#enrichment)
@@ -13,12 +13,9 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 - [Packaging and OS integration](#packaging-and-os-integration)
 - [Auto-updater](#auto-updater)
 
-## Next beta (4.0.0-beta.2)
+## After 4.0.0-beta.2
 
-User feedback on beta.1 (2026-11-10). One session per block, in this order; each ends with `/test` gates green and a commit on its own branch. Done: details label column spacing (`0841ab7`); own company names, one decimal mark, Decisions API shape + `ai` fallback, no `Unknown`/repeated type, legal form stripped, vision only for unreadable pages (block 1); GUI mouse/keyboard parity, scan-language line, custom profile naming, details amount fields (block 2).
-
-3. **International screenshots**: demo data (`gui/demo.rs`) is German-centric (Telekom Deutschland, Stadtwerke München, `Rechnung (2).pdf`, Würth, Raiffeisen, `Kontoauszug`). Make it English/international (English vendors and file names; one or two non-English documents to show multi-language reading). Add a marketing set to `docs/images/` from the snapshot tests (`gui::tests::readme_screenshots`, 1280 × 800, light + dark): preview, details, name matching, settings, offline, done + undo; use them in `README.md` and `docs/guide.md`. Every GUI snapshot changes: look at each PNG.
-4. **Release 4.0.0-beta.2**: `playbooks/release.md` (version bump; README install table and AGENTS.md runbook name the new tag; signed Windows build on the VM, signed + notarized DMG on the Mac mini, which the user must switch on; GitHub serves the deb as `X.Y.Z.beta.N`, fix the Linux `SHA256SUMS` before publishing). Notes: list the beta.1 fixes above.
+4.0.0-beta.2 shipped 2026-11-10 as GitHub Latest. Next: collect beta.2 feedback, then 4.0.0 (`playbooks/release.md`).
 
 - **Details grid for custom profiles**: `screens/detail.rs` always shows the business rows (Company, Date, Type, Total/Subject); a custom profile plan (e.g. `receipts`) shows "Type —", "Subject —". Derive the rows from the plan profile's fields.
 - **Real test PDFs**: `.todo/real-pdfs/` holds 18 real documents for local runs (git-ignored; never commit, never move into fixtures). See its README.

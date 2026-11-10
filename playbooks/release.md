@@ -66,7 +66,7 @@ Then:
 3. `signtool verify /pa /v` on `autorename-pdf.exe`, `autorename-pdf-gui.exe`, `uninstall.exe` (from the install dir) and the setup exe.
 
 ## 5. Verify, checksums, publish
-Flow used for 4.0.0-beta.1 (CI builds Linux; signed Windows comes from the VM, macOS from the Mac mini):
+Flow used for 4.0.0-beta.1 and beta.2 (CI builds Linux; signed Windows comes from the VM, macOS from the Mac mini; both signed builds can run while the PR CI runs, from the local branch: VM via `git bundle`, Mac via `mac.sh sync`):
 1. PR to `main` → `ci.yml` green (fmt, clippy + tests on Linux and Windows, licenses). A run with zero jobs and "workflow file issue" can be a GitHub internal error (see the run page annotation): `gh run rerun <id>`.
 2. Signed builds in parallel: Windows VM (step 4, then [windows-vm-validation.md](windows-vm-validation.md) steps 2-7) and Mac ([macos-release.md](macos-release.md) steps 3-4). Copy the Windows setup exe + `SHA256SUMS` to the host via `\\host.lan\Data`; `mac.sh pull` the DMG + `SHA256SUMS`. `sha256sum -c` each.
 3. Merge the PR (fast-forward), tag `vX.Y.Z[-beta.N]` on the merge commit, push the tag. `release.yml`: version check, license gates, Linux (ubuntu-24.04) + unsigned Windows packages, `smoke-linux` (Ubuntu 24.04 deb + AppImage, Arch pacman: CLI + PDFium + OCR), then a draft release (pre-release for `-` tags) with `--generate-notes`.
