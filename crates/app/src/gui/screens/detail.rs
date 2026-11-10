@@ -174,7 +174,8 @@ fn body(ui: &mut Ui, m: &Model, i: usize, row: &Row, acts: &mut Vec<Action>) {
         });
     }
 
-    section(ui, "Fields", |ui| fields(ui, item, w));
+    let hidden = amount_sources(m);
+    section(ui, "Fields", |ui| fields(ui, item, &hidden, w));
 
     // Name match of the profile's harmonize_field (none: no section).
     if let Some((one, _)) = m.name_label() {
@@ -234,7 +235,20 @@ fn body(ui: &mut Ui, m: &Model, i: usize, row: &Row, acts: &mut Vec<Action>) {
     }
 }
 
-fn fields(ui: &mut Ui, item: &autorename_core::pipeline::PlanItem, w: f32) {
+/// Fields the details grid leaves out: the plan profile's amount *sources*
+/// (`amount.amount`, `amount.currency`), since the formatted field already
+/// shows both (§4.4). Issuer/recipient stay: they explain AP/AR.
+pub fn amount_sources(m: &Model) -> Vec<String> {
+    m.config
+        .settings
+        .as_ref()
+        .filter(|s| m.meta.as_ref().is_none_or(|mt| mt.profile == s.profile_id))
+        .and_then(|s| s.profile.amount.as_ref())
+        .map(|a| vec![a.amount.clone(), a.currency.clone()])
+        .unwrap_or_default()
+}
+
+fn fields(ui: &mut Ui, item: &autorename_core::pipeline::PlanItem, hidden: &[String], w: f32) {
     let p = theme::palette(ui);
     let get = |k: &str| item.fields.get(k).and_then(Value::as_str).unwrap_or("");
     let ty = get("document_type");
@@ -267,11 +281,9 @@ fn fields(ui: &mut Ui, item: &autorename_core::pipeline::PlanItem, w: f32) {
             "description",
         ]
         .contains(&k.as_str())
+            && !hidden.contains(k)
         {
-            pairs.push((
-                sentence(&k.replace('_', " ")),
-                v.as_str().unwrap_or_default().into(),
-            ));
+            pairs.push((model::field_title(k), v.as_str().unwrap_or_default().into()));
         }
     }
     // Label column (§4.4): at least LABEL_COL, wider when a label needs it,
