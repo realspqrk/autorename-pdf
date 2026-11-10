@@ -162,7 +162,7 @@ fn scrolled_settings() -> Vec<Scrolled> {
         (
             "settings_processing_unreadable",
             demo::settings_ocr_unreadable_model,
-            "Scan languages: Automatic (all installed languages)",
+            "Reads Latin-script languages: English, German, French + 45 more",
         ),
         (
             "settings_processing_advanced",
@@ -1339,15 +1339,36 @@ fn ocr_route_status_and_threshold() {
     assert!(h.state().m.settings.dirty());
 }
 
-/// Scan languages: `auto` first, then one option per pack; a hand-written
-/// code shows as its pack, an unknown one as itself; the tooltip lists
-/// every language.
+/// Scan languages: one pack → a read-only line (nothing to choose; every
+/// language in the tooltip). Two or more packs → a select of `auto` plus
+/// the installed packs; a hand-written code shows as its pack, an unknown
+/// one as itself (and brings the select back to repair it).
 #[test]
-fn scan_language_select_is_automatic_or_a_pack() {
+fn scan_language_line_or_select_of_installed_packs() {
     use super::screens::settings::{
-        ocr_language_details, ocr_language_index, ocr_language_options,
+        ocr_language_details, ocr_language_index, ocr_language_line, ocr_language_options,
     };
-    let opts = ocr_language_options("auto");
+    use autorename_core::ocr::{PACKS, Pack, manifest::LATIN};
+    assert_eq!(PACKS.len(), 1, "today only the latin pack");
+    for v in ["auto", "", "de", "latin"] {
+        assert_eq!(
+            ocr_language_line(v, PACKS).as_deref(),
+            Some("Reads Latin-script languages: English, German, French + 45 more")
+        );
+    }
+    assert_eq!(ocr_language_line("ja", PACKS), None, "unknown: select");
+    let opts = ocr_language_options("ja", PACKS, &["latin"]);
+    assert_eq!(opts[2], ("ja".into(), "ja".into()));
+    assert_eq!(ocr_language_index("ja", &opts, PACKS), 2);
+    // Two packs: Automatic + installed packs only (plus the current one).
+    const CYR: Pack = Pack {
+        id: "cyrillic",
+        languages: &["ru", "uk"],
+        ..LATIN
+    };
+    let two = [LATIN, CYR];
+    assert_eq!(ocr_language_line("auto", &two), None);
+    let opts = ocr_language_options("auto", &two, &["latin"]);
     assert_eq!(
         opts,
         vec![
@@ -1361,12 +1382,10 @@ fn scan_language_select_is_automatic_or_a_pack() {
             ),
         ]
     );
-    assert_eq!(ocr_language_index("auto"), 0);
-    assert_eq!(ocr_language_index(""), 0);
-    assert_eq!(ocr_language_index("de"), 1);
-    assert_eq!(ocr_language_index("latin"), 1);
-    assert_eq!(ocr_language_index("ja"), 2);
-    assert_eq!(ocr_language_options("ja")[2], ("ja".into(), "ja".into()));
+    assert_eq!(ocr_language_index("de", &opts, &two), 1);
+    let opts = ocr_language_options("ru", &two, &["latin"]);
+    assert_eq!(opts.len(), 3, "the current value's pack stays listed");
+    assert_eq!(ocr_language_index("ru", &opts, &two), 2);
     let all = ocr_language_details("auto");
     assert!(
         all.starts_with("Uses every installed scan reader."),
@@ -1383,12 +1402,13 @@ fn scan_language_select_is_automatic_or_a_pack() {
 
     let _gpu = gpu_lock();
     let mut h = harness(|| demo::settings_model(page::PROCESSING), SIZES[0], false);
-    h.get_by_label("Scan languages: Automatic (all installed languages)")
+    h.get_by_label("Reads Latin-script languages: English, German, French + 45 more")
         .scroll_to_me();
     h.run();
-    h.state_mut().m.settings.form.ocr_language = "de".into();
+    assert!(h.query_by_label_contains("Scan languages:").is_none());
+    h.state_mut().m.settings.form.ocr_language = "ja".into();
     h.run();
-    h.get_by_label("Scan languages: Latin script: English, German, French + 45 more");
+    h.get_by_label("Scan languages: ja");
     assert!(h.query_by_label_contains("Extra checks").is_none());
     assert!(h.query_by_label_contains("Logo check").is_none());
 }
@@ -2905,4 +2925,246 @@ fn failure_banner_points_to_history_when_the_journal_is_unreadable() {
     assert_eq!(other.title, "Renaming failed.");
     assert_eq!(other.body, e.message);
     assert!(other.action.is_none());
+}
+
+/// Starts the inline edit of row 1 with the mouse (hover → pencil).
+fn mouse_edit_row1(h: &mut Harness<'_, App>) {
+    h.get_by_label_contains("Rechnung (2).pdf, ").hover();
+    h.run();
+    h.get_by_label("Edit name of Rechnung (2).pdf").click();
+    h.run();
+    assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(1));
+    assert_eq!(focused_label(h), "Edit proposed name", "field focused once");
+}
+
+fn type_text(h: &mut Harness<'_, App>, t: &str) {
+    for c in t.chars() {
+        h.event(egui::Event::Text(c.to_string()));
+    }
+    h.run();
+}
+
+/// Inline edit by mouse alone (checklist 13): Save and Cancel buttons; a
+/// click away commits like a Finder/Explorer rename; an invalid name stays
+/// in edit with its error and focus does not jump back.
+#[test]
+fn inline_edit_save_cancel_and_click_away_by_mouse() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    let edited = |h: &Harness<'_, App>| h.state().m.rows[1].edited.clone().unwrap_or_default();
+    mouse_edit_row1(&mut h);
+    type_text(&mut h, " X");
+    h.get_by_label("Save name").click();
+    h.run();
+    assert!(h.state().m.editing.is_none(), "Save commits");
+    assert!(edited(&h).ends_with(" X.pdf"), "{}", edited(&h));
+
+    mouse_edit_row1(&mut h);
+    type_text(&mut h, " Y");
+    h.get_by_label("Cancel name edit").click();
+    h.run();
+    assert!(h.state().m.editing.is_none(), "Cancel reverts");
+    assert!(edited(&h).ends_with(" X.pdf"), "{}", edited(&h));
+
+    mouse_edit_row1(&mut h);
+    type_text(&mut h, " Z");
+    h.get_by_label_contains("scan_0041.pdf, ").click();
+    h.run();
+    assert!(h.state().m.editing.is_none(), "click away commits");
+    assert!(edited(&h).ends_with(" Z.pdf"), "{}", edited(&h));
+    assert_eq!(h.state().m.active, Some(0), "the click still lands");
+
+    // Invalid (another row's name): click away keeps the edit open.
+    mouse_edit_row1(&mut h);
+    let taken = h.state().m.rows[0].final_name().unwrap_or_default();
+    h.state_mut().m.editing.as_mut().unwrap().1 = taken.trim_end_matches(".pdf").into();
+    h.run();
+    assert!(
+        h.get_by_label("Save name").accesskit_node().is_disabled(),
+        "Save disabled while invalid"
+    );
+    h.get_by_label_contains("scan_0041.pdf, ").click();
+    h.run();
+    assert!(h.state().m.editing.is_some(), "invalid name stays in edit");
+    assert_ne!(focused_label(&h), "Edit proposed name", "no focus grab");
+    h.get_by_label("Cancel name edit").click();
+    h.run();
+    assert!(h.state().m.editing.is_none());
+}
+
+/// Every row shortcut has a control (checklist 13): the row's right-click
+/// menu offers Edit name, Open, Include/Exclude, Include all and Remove
+/// from list; Delete and Ctrl+A do the same by keyboard.
+#[test]
+fn row_menu_mirrors_row_shortcuts() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_model, SIZES[0], false);
+    let n = h.state().m.rows.len();
+    let menu = |h: &mut Harness<'_, App>, item: &str| {
+        h.get_by_label_contains("scan_0041.pdf, ").click_secondary();
+        h.run();
+        // Menu items read "<label> <shortcut>" (e.g. "Exclude Space").
+        h.get_by(|n| {
+            n.role() == Role::Button
+                && n.label()
+                    .is_some_and(|l| l.rsplit_once(' ').is_some_and(|(a, _)| a == item))
+        })
+        .click();
+        h.run();
+    };
+    menu(&mut h, "Exclude");
+    assert!(!h.state().m.rows[0].checked, "menu excludes");
+    menu(&mut h, "Include all");
+    assert!(h.state().m.rows[0].checked, "menu includes all");
+    menu(&mut h, "Edit name");
+    assert_eq!(h.state().m.editing.as_ref().map(|e| e.0), Some(0));
+    h.key_press(Key::Escape);
+    h.run();
+    menu(&mut h, "Remove from list");
+    assert_eq!(h.state().m.rows.len(), n - 1, "removed from the plan");
+    // Keyboard twins.
+    tab_to(&mut h, |l| {
+        l.contains("will be renamed") || l.contains(", needs")
+    });
+    h.key_press(Key::Space);
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run();
+    assert!(
+        h.state()
+            .m
+            .rows
+            .iter()
+            .filter(|r| r.checkable())
+            .all(|r| r.checked),
+        "Ctrl+A includes all"
+    );
+    h.key_press(Key::Delete);
+    h.run();
+    assert_eq!(h.state().m.rows.len(), n - 2, "Delete removes");
+}
+
+/// The detail divider works by keyboard too: ← / → resize, Enter resets
+/// (mouse: drag, double-click).
+#[test]
+fn detail_divider_resizes_by_keyboard() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::preview_details_model, SIZES[0], false);
+    tab_to(&mut h, |l| l == "Resize detail pane");
+    let w0 = h.get_by_label("Resize detail pane").rect().center().x;
+    h.key_press(Key::ArrowLeft);
+    h.run();
+    let w1 = h.get_by_label("Resize detail pane").rect().center().x;
+    assert_eq!(w0 - w1, 16.0, "← widens the details by 16");
+    assert_eq!(focused_label(&h), "Resize detail pane", "focus stays");
+    h.key_press(Key::Enter);
+    h.run();
+    assert!(h.state().m.detail_w.is_none(), "Enter resets");
+}
+
+/// Modals close by their visible button, not only by Esc (checklist 13).
+#[test]
+fn dialogs_close_by_their_button() {
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::merge_model, SIZES[0], false);
+    h.get_by_label("Cancel").click();
+    h.run();
+    assert!(h.state().m.companies.merge.is_none(), "merge Cancel");
+    let mut h = harness(|| demo::settings_model(page::ABOUT), SIZES[0], false);
+    h.get_by_label("View license").click();
+    h.run();
+    assert!(h.state().m.doc_open.is_some());
+    h.get_by_label("Close").click();
+    h.run();
+    assert!(h.state().m.doc_open.is_none(), "license Close");
+}
+
+/// The details grid leaves out the profile's amount sources (the formatted
+/// total shows both), derived from the profile's `amount`, not field names.
+#[test]
+fn details_hide_amount_source_fields() {
+    use super::screens::detail::amount_sources;
+    let m = demo::preview_details_model();
+    assert_eq!(amount_sources(&m), ["total_amount", "currency"]);
+    let (_dir, m) = temp_settings(RECEIPTS, page::NAMING);
+    let mut m = m;
+    if let Some(s) = m.config.settings.as_mut() {
+        s.profile_id = "academic".into();
+        s.profile = autorename_core::profiles::resolve_profiles(m.config.tree.as_ref().unwrap())
+            .unwrap()["academic"]
+            .clone();
+    }
+    assert!(amount_sources(&m).is_empty(), "no amount: nothing hidden");
+}
+
+/// A custom profile id with its own field (`invoice_id`).
+const RECEIPTS: &str = r#"profiles:
+  receipts:
+    intro: "You name shop receipts."
+    fields:
+      document_date:
+        description: "Date of the receipt."
+      company_name:
+        description: "Name of the shop."
+      invoice_id:
+        description: "Receipt number exactly as printed. Empty if absent."
+    template: "{document_date} {company_name} {invoice_id}"
+    truncate_field: company_name"#;
+
+fn receipts_model() -> Model {
+    use super::model::ConfigState;
+    use super::pages::SettingsForm;
+    let (dir, mut m) = temp_settings(RECEIPTS, page::NAMING);
+    let cfg = dir.path().join("config.yaml");
+    let text = std::fs::read_to_string(&cfg).unwrap();
+    std::fs::write(
+        &cfg,
+        text.replacen("profile: business", "profile: receipts", 1),
+    )
+    .unwrap();
+    m.config = ConfigState::load(Some(&cfg), false);
+    let form = SettingsForm::from_settings(m.config.settings.as_ref().expect("valid config"));
+    m.settings.saved = form.clone();
+    m.settings.form = form;
+    // The model outlives this fn (snapshot harness); keep the files.
+    std::mem::forget(dir);
+    m
+}
+
+/// Custom profile (§4.7 Naming): its card reads like the built-ins (label
+/// from the id, template caption, sample name from field labels), and the
+/// page shows only the settings it uses (date only). Snapshot.
+#[test]
+fn custom_profile_renders_generically() {
+    use super::screens::settings::{Uses, sample_name, template_caption};
+    let m = receipts_model();
+    let tree = m.config.tree.clone().unwrap();
+    let ps = autorename_core::profiles::resolve_profiles(&tree).unwrap();
+    let r = &ps["receipts"];
+    assert_eq!(template_caption(r), "Date, company, invoice ID");
+    assert_eq!(
+        sample_name("receipts", r, &m.settings.form),
+        "20251103 Amazon Invoice ID.pdf"
+    );
+    assert_eq!(
+        Uses::of(&tree, "receipts"),
+        Some(Uses {
+            direction: false,
+            amount: false,
+            language: false
+        })
+    );
+    let _gpu = gpu_lock();
+    let mut results = SnapshotResults::new();
+    for size in SIZES {
+        for dark in [false, true] {
+            let mut h = harness(receipts_model, size, dark);
+            h.get_by_label("Receipts profile, for example 20251103 Amazon Invoice ID.pdf");
+            assert!(h.query_by_label_contains("Your company").is_none());
+            assert!(h.query_by_label_contains("Amount format").is_none());
+            assert!(h.query_by_label("Name matching").is_none(), "no name tab");
+            results.add(h.try_snapshot(snap_name("settings_naming_custom", size, dark)));
+        }
+    }
+    results.unwrap();
 }

@@ -203,6 +203,27 @@ impl Row {
 }
 
 /// "Venue" → "venue", "Issuer names" → "issuer names" (keeps "ID").
+/// Common abbreviations in field ids, written in capitals in labels.
+const ABBREVIATIONS: [&str; 7] = ["id", "iban", "bic", "vat", "doi", "isbn", "url"];
+
+/// Display label of a profile field: core's `field_label` ("Company",
+/// "Invoice id") with abbreviations in capitals ("Invoice ID"), so custom
+/// profile fields read like the built-in ones.
+pub fn field_title(field: &str) -> String {
+    let (label, _) = autorename_core::harmonize::field_label(field);
+    label
+        .split(' ')
+        .map(|w| {
+            if ABBREVIATIONS.contains(&w.to_ascii_lowercase().as_str()) {
+                w.to_ascii_uppercase()
+            } else {
+                w.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn noun(label: &str) -> String {
     super::components::stepper::lower_first(label)
 }

@@ -491,6 +491,39 @@ impl App {
         if resp.double_clicked() {
             self.m.detail_w = None;
         }
+        // Keyboard parity: ← / → resize the focused divider, Enter resets.
+        if resp.has_focus() {
+            ui.memory_mut(|m| {
+                m.set_focus_lock_filter(
+                    resp.id,
+                    egui::EventFilter {
+                        horizontal_arrows: true,
+                        ..Default::default()
+                    },
+                )
+            });
+            let (left, right, reset) = ui.input_mut(|i| {
+                (
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+                )
+            });
+            let step = if left {
+                space::LG
+            } else if right {
+                -space::LG
+            } else {
+                0.0
+            };
+            if step != 0.0 {
+                let nw = (dw + step).clamp(size::DETAIL_MIN, max.max(size::DETAIL_MIN));
+                self.m.detail_w = Some(nw);
+            }
+            if reset {
+                self.m.detail_w = None;
+            }
+        }
         resp.widget_info(|| {
             egui::WidgetInfo::labeled(egui::Role::Splitter, true, "Resize detail pane")
         });
@@ -774,11 +807,7 @@ impl App {
             return;
         }
         if take(cmd, Key::A) && !ctx.text_edit_focused() {
-            for r in &mut self.m.rows {
-                if r.checkable() {
-                    r.checked = true;
-                }
-            }
+            acts.push(Action::IncludeAll);
         }
         if ctx.text_edit_focused() || self.m.confirm_stop {
             return;
@@ -848,13 +877,8 @@ impl App {
                 let path = self.m.rows[a].current_path(&self.m.restored).to_path_buf();
                 acts.push(Action::OpenPath(path));
             }
-            if take(Modifiers::NONE, Key::Delete) && !self.m.busy() && self.m.report.is_none() {
-                self.m.rows.remove(a);
-                self.m.active = if self.m.rows.is_empty() {
-                    None
-                } else {
-                    Some(a.min(self.m.rows.len() - 1))
-                };
+            if take(Modifiers::NONE, Key::Delete) {
+                acts.push(Action::RemoveRow(a));
             }
         }
         if self.m.analyzing() && take(Modifiers::NONE, Key::Escape) {
@@ -1182,6 +1206,30 @@ impl App {
             Action::ToggleDetails => self.m.detail_visible = !self.m.detail_visible,
             Action::Activate(i) => self.m.active = Some(i),
             Action::Toggle(i) => self.m.toggle(i),
+            Action::IncludeAll => {
+                for r in &mut self.m.rows {
+                    if r.checkable() {
+                        r.checked = true;
+                    }
+                }
+            }
+            Action::RemoveRow(i) => {
+                // Plan only, never the file; not while busy, done or editing
+                // (indices would shift under the edit).
+                if self.m.busy()
+                    || self.m.report.is_some()
+                    || self.m.editing.is_some()
+                    || i >= self.m.rows.len()
+                {
+                    return;
+                }
+                self.m.rows.remove(i);
+                self.m.active = if self.m.rows.is_empty() {
+                    None
+                } else {
+                    Some(i.min(self.m.rows.len() - 1))
+                };
+            }
             Action::StartEdit(i) => {
                 if self.m.busy() || self.m.report.is_some() {
                     return;
@@ -1195,11 +1243,14 @@ impl App {
                     self.m.editing = Some((i, base));
                 }
             }
-            Action::CommitEdit => {
+            Action::CommitEdit { refocus } => {
                 if let Some((i, t)) = self.m.editing.clone()
                     && self.m.commit_edit(i, &t)
                 {
                     self.m.editing = None;
+                    if !refocus {
+                        return;
+                    }
                     ctx.memory_mut(|m| {
                         m.request_focus(egui::Id::unique(("row", self.m.rows[i].source.as_path())))
                     });

@@ -18,6 +18,7 @@ use crate::gui::pages::{
     TOGGLES, TextDoc, amount_example, cpu_count, date_example, page,
 };
 use crate::gui::theme::{self, Tone, motion, size, space, stroke, typ};
+use autorename_core::ocr::Pack;
 use autorename_core::profiles::Profile;
 
 pub const NAV_W: f32 = size::SETTINGS_NAV;
@@ -750,38 +751,65 @@ pub fn ocr_language_name(code: &str) -> &str {
     }
 }
 
-/// Options of the scan-language select (§4.7 Reading): `auto` first, then
-/// one per known pack, then the current value when no pack serves it.
+/// The pack serving `lang` (an id or a language code) among `packs`.
+fn find_pack<'a>(packs: &'a [Pack], lang: &str) -> Option<&'a Pack> {
+    let l = lang.trim().to_ascii_lowercase();
+    packs
+        .iter()
+        .find(|p| p.id == l || p.languages.contains(&l.as_str()))
+}
+
+/// Read-only scan-language line (§4.7 Reading) while only one pack exists:
+/// "Automatic" and the pack would do the same thing, so there is nothing to
+/// choose. `None` (show the select) with two or more packs, or when the
+/// config names a language no pack reads (the select repairs it).
+pub fn ocr_language_line(current: &str, packs: &[Pack]) -> Option<String> {
+    let [pk] = packs else { return None };
+    let cur = current.trim();
+    let served =
+        cur.is_empty() || autorename_core::ocr::is_auto(cur) || find_pack(packs, cur).is_some();
+    served.then(|| format!("Reads {}: {}", script_languages(pk), languages_short(pk)))
+}
+
+/// Options of the scan-language select (§4.7 Reading, two or more packs):
+/// `auto` first, then each installed pack (and the pack of the current
+/// value), then the current value when no pack serves it.
 /// Returns `(config value, label)` pairs.
-pub fn ocr_language_options(current: &str) -> Vec<(String, String)> {
+pub fn ocr_language_options(
+    current: &str,
+    packs: &[Pack],
+    installed: &[&str],
+) -> Vec<(String, String)> {
+    let cur = current.trim();
+    let cur_pack = (!autorename_core::ocr::is_auto(cur))
+        .then(|| find_pack(packs, cur))
+        .flatten()
+        .map(|pk| pk.id);
     let mut v = vec![(
         autorename_core::ocr::AUTO_LANGUAGE.to_string(),
         "Automatic (all installed languages)".to_string(),
     )];
     v.extend(
-        autorename_core::ocr::PACKS
+        packs
             .iter()
+            .filter(|pk| installed.contains(&pk.id) || cur_pack == Some(pk.id))
             .map(|pk| (pk.id.to_string(), pack_option(pk))),
     );
-    let cur = current.trim();
-    if !cur.is_empty() && autorename_core::ocr::pack_for_language(cur).is_none() {
+    if !cur.is_empty() && !autorename_core::ocr::is_auto(cur) && cur_pack.is_none() {
         v.push((cur.to_string(), cur.to_string()));
     }
     v
 }
 
-/// Index of `current` in [`ocr_language_options`]: a hand-written code
+/// Index of `current` in its [`ocr_language_options`]: a hand-written code
 /// shows as its pack's option.
-pub fn ocr_language_index(current: &str) -> usize {
+pub fn ocr_language_index(current: &str, options: &[(String, String)], packs: &[Pack]) -> usize {
     let cur = current.trim();
     if autorename_core::ocr::is_auto(cur) || cur.is_empty() {
         return 0;
     }
-    let packs = autorename_core::ocr::PACKS;
-    match autorename_core::ocr::pack_for_language(cur) {
-        Some(pk) => 1 + packs.iter().position(|p| p.id == pk.id).unwrap_or(0),
-        None => 1 + packs.len(),
-    }
+    let value = find_pack(packs, cur).map_or(cur, |pk| pk.id);
+    options.iter().position(|(v, _)| v == value).unwrap_or(0)
 }
 
 /// Languages named first in pack labels (most common documents).
@@ -811,16 +839,29 @@ fn script_name(pk: &autorename_core::ocr::Pack) -> &'static str {
     }
 }
 
-/// Select label of a pack: "Latin script: English, German, French + 45 more".
-pub fn pack_option(pk: &autorename_core::ocr::Pack) -> String {
+/// "Latin-script languages" (the read-only line's subject).
+fn script_languages(pk: &Pack) -> String {
+    match pk.id {
+        "latin" => "Latin-script languages".into(),
+        id => format!("{id} languages"),
+    }
+}
+
+/// "English, German, French + 45 more".
+fn languages_short(pk: &Pack) -> String {
     let langs = pack_languages(pk);
     let shown = &langs[..langs.len().min(3)];
     let more = langs.len() - shown.len();
-    let mut out = format!("{}: {}", script_name(pk), shown.join(", "));
+    let mut out = shown.join(", ");
     if more > 0 {
         out.push_str(&format!(" + {more} more"));
     }
     out
+}
+
+/// Select label of a pack: "Latin script: English, German, French + 45 more".
+pub fn pack_option(pk: &autorename_core::ocr::Pack) -> String {
+    format!("{}: {}", script_name(pk), languages_short(pk))
 }
 
 /// Tooltip of the scan-language select: every language that is read.
@@ -942,25 +983,43 @@ fn reading(ui: &mut Ui, m: &mut Model, acts: &mut Vec<Action>) {
         );
     }
     ui.add_space(space::XL);
-    let options = ocr_language_options(&f.ocr_language);
-    let names: Vec<String> = options.iter().map(|(_, l)| l.clone()).collect();
-    let mut sel = ocr_language_index(&f.ocr_language).min(options.len() - 1);
     field_label(ui, "Scan languages");
-    let before = sel;
-    let (resp, changed) = Select {
-        a11y: "Scan languages",
-        width: ui.available_width(),
-        options: &names,
-        enabled: true,
-        mono: false,
-    }
-    .show(ui, &mut sel);
-    resp.on_hover_text(ocr_language_details(&f.ocr_language));
-    if changed
-        && sel != before
-        && let Some((v, _)) = options.get(sel)
-    {
-        m.settings.form.ocr_language = v.clone();
+    let packs = autorename_core::ocr::PACKS;
+    if let Some(line) = ocr_language_line(&f.ocr_language, packs) {
+        // One pack: a plain line, every language in the tooltip.
+        let w = ui.available_width().min(size::PROSE_MAX);
+        let (r, resp) = ui.allocate_exact_size(theme::v2(w, typ::BODY.line), Sense::hover());
+        let shown = ellipsize_end(ui, &line, typ::BODY, w);
+        paint_text(ui, r.left(), r.center().y, &shown, typ::BODY, p.text);
+        resp.widget_info(|| WidgetInfo::labeled(egui::Role::Label, true, &line));
+        resp.on_hover_text(ocr_language_details(&f.ocr_language));
+    } else {
+        let installed: Vec<&str> = m
+            .settings
+            .packs
+            .iter()
+            .filter(|st| st.installed)
+            .map(|st| st.pack)
+            .collect();
+        let options = ocr_language_options(&f.ocr_language, packs, &installed);
+        let names: Vec<String> = options.iter().map(|(_, l)| l.clone()).collect();
+        let mut sel = ocr_language_index(&f.ocr_language, &options, packs);
+        let before = sel;
+        let (resp, changed) = Select {
+            a11y: "Scan languages",
+            width: ui.available_width(),
+            options: &names,
+            enabled: true,
+            mono: false,
+        }
+        .show(ui, &mut sel);
+        resp.on_hover_text(ocr_language_details(&f.ocr_language));
+        if changed
+            && sel != before
+            && let Some((v, _)) = options.get(sel)
+        {
+            m.settings.form.ocr_language = v.clone();
+        }
     }
     if pack_id.is_none() {
         status_line(ui, Tone::Warning, "No OCR model reads this language yet.");
@@ -1309,7 +1368,7 @@ pub fn template_caption(prof: &Profile) -> String {
                 Some("date".to_string())
             }
             autorename_core::profiles::Token::Field(f) => {
-                Some(noun(&autorename_core::harmonize::field_label(f).0))
+                Some(noun(&crate::gui::model::field_title(f)))
             }
             autorename_core::profiles::Token::Literal(_) => None,
         })
@@ -1441,7 +1500,7 @@ pub fn sample_name(id: &str, prof: &Profile, f: &SettingsForm) -> String {
             "first_author_surname" => "Vaswani".into(),
             "journal_name" => "NeurIPS".into(),
             "title" => "Attention Is All You Need".into(),
-            other => autorename_core::harmonize::field_label(other).0,
+            other => crate::gui::model::field_title(other),
         }
     };
     let mut fields: serde_json::Map<String, serde_json::Value> = prof
