@@ -6,7 +6,7 @@ Rename PDFs from their content (AI + OCR).
 
 autorename-pdf reads each PDF, asks an AI model for the date, company,
 document type and total, and renames the file, e.g. `scan_0042.pdf` ->
-`20240315 ACME AP EUR 4,258.80.pdf`. It also stores the extracted data inside
+`20240315 ACME AP EUR 4258.80.pdf`. It also stores the extracted data inside
 the PDF and keeps company names spelled the same way. Text is read on this
 computer first (text layer, then local OCR); page images go to the model only
 when that is not enough. Every change can be reverted with `undo`.

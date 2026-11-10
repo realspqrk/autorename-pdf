@@ -8,7 +8,7 @@ Tool-agnostic source of truth for agents. Be concise; smallest correct diff.
 
 For agents asked to "set up AutoRename-PDF" for a user. Non-interactive; ask the user only for the provider + API key (or "offline with Ollama") and their company name. Never put a key on a command line or in chat output.
 
-1. **Get the binary** (`$APP` below). 4.x is in beta: always pass the tag `v4.0.0-beta.2` (without it `gh` fetches 3.x, the latest stable release).
+1. **Get the binary** (`$APP` below). Pass the tag `v4.0.0-beta.2` (the current release; pinned so the runbook stays reproducible).
    - Windows x64: `gh release download v4.0.0-beta.2 --repo realspqrk/autorename-pdf --pattern "*_x64-setup.exe"`, run it with `/S` (per-user, no admin). `$APP` = `autorename-pdf` (on the user PATH in new shells) or `%LOCALAPPDATA%\Programs\AutoRename-PDF\autorename-pdf.exe`.
    - Linux x86_64: `gh release download v4.0.0-beta.2 --repo realspqrk/autorename-pdf --pattern "*.AppImage"`, `chmod +x`. `$APP` = that file. Preflight FUSE: `ls /dev/fuse && (command -v fusermount3 || command -v fusermount)`; if that fails: `$APP --appimage-extract && mkdir -p ~/.local/opt && mv squashfs-root ~/.local/opt/autorename-pdf` and use `$APP` = `~/.local/opt/autorename-pdf/AppRun` (stable path for `--integrate`).
    - macOS Apple silicon: `gh release download v4.0.0-beta.2 --repo realspqrk/autorename-pdf --pattern "*_aarch64.dmg"`, then `hdiutil attach -nobrowse -mountpoint /tmp/arp-dmg <dmg> && ditto /tmp/arp-dmg/AutoRename-PDF.app ~/Applications/AutoRename-PDF.app && hdiutil detach /tmp/arp-dmg`. `$APP` = `~/Applications/AutoRename-PDF.app/Contents/MacOS/autorename-pdf`.
