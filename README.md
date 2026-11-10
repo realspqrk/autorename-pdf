@@ -28,7 +28,7 @@ Download from the [4.0.0-beta.1 release](https://github.com/realspqrk/autorename
 | Windows 10/11 (x64) | `AutoRename-PDF_4.0.0-beta.1_x64-setup.exe` | Double-click it; no admin rights needed. Then open AutoRename-PDF from the Start menu. |
 | macOS 11+ (Apple silicon) | `AutoRename-PDF_4.0.0-beta.1_aarch64.dmg` | Open it and drag AutoRename-PDF into Applications. Signed and notarized by Apple. |
 | Linux (x86_64, any distro) | `autorename-pdf_4.0.0-beta.1_x86_64.AppImage` | `chmod +x autorename-pdf_*.AppImage`, then run it. |
-| Ubuntu 24.04+ / Debian 13+ | `autorename-pdf_4.0.0~beta.1_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
+| Ubuntu 24.04+ / Debian 13+ | `autorename-pdf_4.0.0.beta.1_amd64.deb` | `sudo apt install ./autorename-pdf_*_amd64.deb` |
 | Arch / Omarchy | `autorename-pdf_4.0.0beta.1_x86_64.tar.gz` + `PKGBUILD` | `makepkg -si` in a folder holding both. |
 
 On Linux, run `integrate install` once for the menu entry and the right-click entries: `./autorename-pdf_*.AppImage integrate install` (AppImage) or `autorename-pdf integrate install`. Install details (uninstall, AppImage without FUSE): [docs/guide.md](docs/guide.md#install-details).

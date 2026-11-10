@@ -71,7 +71,7 @@ Flow used for 4.0.0-beta.1 (CI builds Linux; signed Windows comes from the VM, m
 2. Signed builds in parallel: Windows VM (step 4, then [windows-vm-validation.md](windows-vm-validation.md) steps 2-7) and Mac ([macos-release.md](macos-release.md) steps 3-4). Copy the Windows setup exe + `SHA256SUMS` to the host via `\\host.lan\Data`; `mac.sh pull` the DMG + `SHA256SUMS`. `sha256sum -c` each.
 3. Merge the PR (fast-forward), tag `vX.Y.Z[-beta.N]` on the merge commit, push the tag. `release.yml`: version check, license gates, Linux (ubuntu-24.04) + unsigned Windows packages, `smoke-linux` (Ubuntu 24.04 deb + AppImage, Arch pacman: CLI + PDFium + OCR), then a draft release (pre-release for `-` tags) with `--generate-notes`.
 4. Replace the unsigned Windows assets and add macOS: rename each manifest to `SHA256SUMS-<triple>`, then `gh release upload vX.Y.Z <setup.exe> SHA256SUMS-x86_64-pc-windows-msvc <dmg> SHA256SUMS-aarch64-apple-darwin --clobber`.
-5. Check the draft: asset names (GitHub may rewrite special characters; the README install table names exact files), one `SHA256SUMS-*` per platform, download one asset and `sha256sum -c`. Set the notes (`gh release edit --notes-file`), then publish: `gh release edit vX.Y.Z --draft=false` (pre-releases keep `--prerelease`).
+5. Check the draft: asset names (GitHub rewrites `~` to `.`, so the beta deb is `X.Y.Z.beta.N`: `sed -i 's/~beta/.beta/'` the Linux `SHA256SUMS` and re-upload it with `--clobber`; the README install table and the notes name exact files), one `SHA256SUMS-*` per platform, download one asset and `sha256sum -c`. Set the notes (`gh release edit --notes-file`), then publish: `gh release edit vX.Y.Z --draft=false` (pre-releases keep `--prerelease`).
 
 ## What is where
 | Item | Path |
