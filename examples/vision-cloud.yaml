@@ -1,5 +1,5 @@
 # Scans read by a cloud vision model, without local OCR.
-# Filename: 20260906 ACME AP 12,13.pdf
+# Filename: 20260906 ACME AP EUR 12.13.pdf
 # The text layer is still read first; page images are sent whenever vision
 # is `true` (set `auto` to send them only for poor text layers).
 # Every key not listed here uses its default (see config.yaml.example).

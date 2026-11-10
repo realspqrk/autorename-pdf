@@ -1,5 +1,5 @@
 # German invoice codes: ER = Eingangsrechnung, AR = Ausgangsrechnung.
-# Filename: 20260906 ACME ER 12,13.pdf
+# Filename: 20260906 ACME ER EUR 12,13.pdf
 # Common German bookkeeping abbreviations, not a DATEV filename standard.
 # Every key not listed here uses its default (see config.yaml.example).
 config_version: 4
@@ -13,7 +13,8 @@ pdf:
   outgoing_invoice: AR          # same token as the default; here Ausgangsrechnung
 
 company:
-  name: "Meine Firma GmbH"      # your company, so ER and AR can be told apart
+  names: ["Meine Firma GmbH"]   # your names on invoices, so ER and AR can be told apart
 
 output:
   language: German              # non-invoice types: Brief, Vertrag, ...
+  decimal_separator: ","        # 12,13

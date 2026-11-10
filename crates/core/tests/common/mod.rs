@@ -13,7 +13,7 @@ pub fn sample_config() -> Value {
     json!({
         "ai": {"provider": "openai", "model": "gpt-6-luna", "api_key": "test-key-123", "base_url": "", "temperature": 0.0, "max_retries": 2},
         "pdf": {"max_pages": 3, "ocr": false, "vision": false, "text_quality_threshold": 0.3, "outgoing_invoice": "AR", "incoming_invoice": "AP"},
-        "company": {"name": "Test Company"},
+        "company": {"names": ["Test Company"]},
         "output": {"language": "English", "date_format": "%Y%m%d"},
         "prompt_extension": ""
     })
@@ -38,7 +38,7 @@ pub fn rendered(
     if let Some(fmt) = date_format {
         config["output"]["date_format"] = json!(fmt);
     }
-    let (id, profile) = select_profile(&config, Some(selected))
+    let (_id, profile) = select_profile(&config, Some(selected))
         .unwrap_or_else(|e| panic!("select {selected}: {e}"));
     let fields = values.as_object().cloned().unwrap_or_default();
     let before = fields.clone();
@@ -46,7 +46,7 @@ pub fn rendered(
         .as_str()
         .unwrap_or("%Y%m%d")
         .to_string();
-    let name = render_filename(&id, &profile, &fields, &fmt);
+    let name = render_filename(&profile, &fields, &fmt);
     assert_eq!(fields, before);
     name
 }

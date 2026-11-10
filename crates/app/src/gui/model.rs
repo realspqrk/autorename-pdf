@@ -698,7 +698,7 @@ impl Model {
         let company = config
             .tree
             .as_ref()
-            .and_then(|t| t.pointer("/company/name"))
+            .and_then(|t| t.pointer("/company/names/0"))
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string();

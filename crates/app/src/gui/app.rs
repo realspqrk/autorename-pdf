@@ -1986,8 +1986,8 @@ impl App {
             autorename_core::config_edit::set(
                 &text,
                 Some("company"),
-                "name",
-                &autorename_core::config_edit::quoted(s.company.trim()),
+                "names",
+                &autorename_core::config_edit::quoted_list(&[s.company.trim()]),
             )
         };
         let env_path = config::env_path(&path);

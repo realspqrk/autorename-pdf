@@ -1,1 +1,1 @@
-{"id":"dec_01","object":"decision","model":"gpt-6-luna","choice":"ACME Corporation","score":0.94}
+{"answers":[{"type":"choice","name":"match","choice":"0","probabilities":[{"value":"0","probability":0.94},{"value":"1","probability":0.04},{"value":"new","probability":0.02}],"confidence":0.92}],"model":"gpt-6-luna","usage":{"input_tokens":120,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":120}}

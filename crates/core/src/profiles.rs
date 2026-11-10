@@ -48,7 +48,7 @@ pub struct Amount {
 /// Deterministic derivation of one field (e.g. `document_type` = AP/AR) from
 /// two extracted company fields, instead of trusting the model's choice:
 /// when the model's `field` value is `incoming` or `outgoing`, the value is
-/// re-derived by matching `recipient` / `issuer` against `company.name`
+/// re-derived by matching `recipient` / `issuer` against `company.names`
 /// (harmonized fuzzy match). Ambiguous (both/neither match) keeps the model's
 /// value and warns `direction_uncertain`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -105,15 +105,20 @@ fn text_at(config: &Value, section: &str, key: &str) -> String {
         .to_string()
 }
 
-fn company_name(config: &Value) -> String {
-    text_at(config, "company", "name")
+/// `company.names` for the prompt: `"A", "B"` (empty when none).
+fn company_names(config: &Value) -> String {
+    crate::config::company_names(config)
+        .iter()
+        .map(|n| format!("{n:?}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn company_name_description(config: &Value) -> &'static str {
-    if company_name(config).is_empty() {
+    if company_names(config).is_empty() {
         "Find the main company in the document. Strip the legal form, such as e.U., SARL, GmbH, AG, Ltd, or Limited. Empty if no company is found."
     } else {
-        "Find the counterparty company. My company name is \"{company}\"; exclude my own company. Strip the legal form, such as e.U., SARL, GmbH, AG, Ltd, or Limited. Empty if no company is found."
+        "Find the counterparty company. My own company goes by these names: {company}. Exclude my own company under any of them. Strip the legal form, such as e.U., SARL, GmbH, AG, Ltd, or Limited. Empty if no company is found."
     }
 }
 
@@ -239,7 +244,7 @@ fn field_names(tokens: &[Token]) -> Vec<&str> {
 /// Expand the four prompt placeholders once; substituted values stay literal.
 pub fn interpolate_profile_text(text: &str, config: &Value) -> Result<String> {
     let values = [
-        ("company", company_name(config)),
+        ("company", company_names(config)),
         ("language", text_at(config, "output", "language")),
         (
             "incoming_invoice",

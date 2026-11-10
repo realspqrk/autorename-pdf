@@ -1418,7 +1418,7 @@ fn config_cmd(c: &ConfigCmd, ctx: &Ctx<'_>) -> Result<ExitCode> {
             if out.is_text() {
                 out.line(&format!("Wrote {}", path.display()));
                 out.note(&format!(
-                    "Next: put OPENAI_API_KEY=... into {}, set company.name, then `{}`.",
+                    "Next: put OPENAI_API_KEY=... into {}, set company.names, then `{}`.",
                     env_file.display(),
                     out.command(&["config", "validate"])
                 ));

@@ -103,10 +103,9 @@ fn raw_str<'a>(fields: &'a Map<String, Value>, name: &str) -> &'a str {
     fields.get(name).and_then(Value::as_str).unwrap_or("")
 }
 
-/// Per-field display values: formatted date or `00000000`, sanitized text,
-/// `Unknown` fallbacks only for the literal built-in `business` profile.
+/// Per-field display values: formatted date or `00000000`, sanitized text
+/// (empty stays empty: the field and its separator are left out).
 fn prepare_values(
-    profile_id: &str,
     profile: &Profile,
     fields: &Map<String, Value>,
     date_format: &str,
@@ -123,14 +122,10 @@ fn prepare_values(
                 }
             } else {
                 let cleaned = sanitize_filename(&nfc(raw));
-                if !cleaned.trim().is_empty() {
-                    cleaned
-                } else if profile_id == "business"
-                    && (name == "company_name" || name == "document_type")
-                {
-                    UNKNOWN_VALUE.to_string()
-                } else {
+                if cleaned.trim().is_empty() {
                     String::new()
+                } else {
+                    cleaned
                 }
             };
             (name.clone(), value)
@@ -195,15 +190,41 @@ fn join_tokens(tokens: &[Token], values: &[(String, String)]) -> String {
     base.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// A field value that the next non-empty field in the template repeats at
+/// its start (`Invoice` + `Invoice 2024-11`, case-insensitive, whole words)
+/// is left out, so the name does not say it twice.
+fn drop_repeats(tokens: &[Token], values: &mut [(String, String)]) {
+    let order: Vec<usize> = tokens
+        .iter()
+        .filter_map(|t| match t {
+            Token::Field(n) => values.iter().position(|(k, _)| k == n),
+            Token::Literal(_) => None,
+        })
+        .filter(|&i| !values[i].1.is_empty())
+        .collect();
+    for pair in order.windows(2) {
+        let (cur, next) = (
+            values[pair[0]].1.to_lowercase(),
+            values[pair[1]].1.to_lowercase(),
+        );
+        let repeated = next
+            .strip_prefix(&cur)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '-', '_', ',']));
+        if repeated && pair[0] != pair[1] {
+            values[pair[0]].1.clear();
+        }
+    }
+}
+
 /// Render `<basename>.pdf` for raw model `fields`. Pure; does not mutate input.
 pub fn render_filename(
-    profile_id: &str,
     profile: &Profile,
     fields: &Map<String, Value>,
     date_format: &str,
 ) -> String {
     let tokens = template_tokens(&profile.template);
-    let mut values = prepare_values(profile_id, profile, fields, date_format);
+    let mut values = prepare_values(profile, fields, date_format);
+    drop_repeats(&tokens, &mut values);
     let truncate = profile.truncate_field.as_str();
 
     let mut base = join_tokens(&tokens, &values);

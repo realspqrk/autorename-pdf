@@ -1,5 +1,5 @@
 # Business invoices with printed total AND printed invoice number.
-# Filename: 20260906 ACME AP 12,13 12345.pdf
+# Filename: 20260906 ACME AP EUR 12.13 12345.pdf
 # `description` stays the printed total; invoice_id is empty when absent.
 # The overlay merges into the built-in business profile: do not repeat its fields.
 # Every key not listed here uses its default (see config.yaml.example).
@@ -10,7 +10,7 @@ ai:
   api_key: "${OPENAI_API_KEY}"
 
 company:
-  name: "Your Company Ltd"
+  names: ["Your Company Ltd"]
 
 profiles:
   business:

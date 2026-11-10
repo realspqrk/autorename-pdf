@@ -13,8 +13,11 @@
 //!    Failed or unavailable OCR keeps `Qtext` and adds a warning. The OCR
 //!    evidence of a page is every non-blank line when `R < L`, else only the
 //!    lines that its text layer does not already have ([`image_only_lines`]).
-//! 3. Vision: `on` ⇒ every page image, `off` ⇒ none, `auto` ⇒ pages whose
-//!    result `Q` is still `< L`.
+//! 3. Vision: `on` ⇒ every page image, `off` ⇒ none, `auto` ⇒ pages still
+//!    unreadable: `Q < L` after a successful OCR, else `R < L`. The picture
+//!    cap only sends a page to the free local OCR, never to paid vision: a
+//!    clean text layer with a logo is read as text (on 18 real invoices
+//!    vision added nothing over the text layer).
 //!
 //! Pages are rendered once at [`render::RENDER_SCALE`], only when OCR or
 //! vision may need them; PNGs are encoded only for the pages that go to the
@@ -319,7 +322,7 @@ pub fn extract_with(path: &Path, cfg: &ExtractConfig) -> Result<Extraction> {
                     vision_candidate: match cfg.vision {
                         Toggle::On => true,
                         Toggle::Off => false,
-                        Toggle::Auto => ocr || q < thr,
+                        Toggle::Auto => ocr || r < thr,
                     },
                 }
             })
@@ -345,7 +348,7 @@ pub fn extract_with(path: &Path, cfg: &ExtractConfig) -> Result<Extraction> {
                     warnings.push(format!("{}: {e}{hint}", e.code()));
                     for r in pages.iter_mut() {
                         r.ocr = false;
-                        r.vision_candidate &= should_run(cfg.vision, r.page.quality, thr);
+                        r.vision_candidate &= should_run(cfg.vision, r.page.text_quality, thr);
                     }
                 }
             }
@@ -416,7 +419,12 @@ pub fn extract_with(path: &Path, cfg: &ExtractConfig) -> Result<Extraction> {
                 }
             }
         }
-        let send = vision_candidate && should_run(cfg.vision, page.quality, thr);
+        // Without an OCR result the uncapped text score decides.
+        let readable = match page.ocr_quality {
+            Some(q) => q,
+            None => page.text_quality,
+        };
+        let send = vision_candidate && should_run(cfg.vision, readable, thr);
         if send && let Some(img) = &image {
             let png = render::encode_png(img)
                 .map_err(|e| Error::General(format!("PNG encoding failed: {e}")))?;

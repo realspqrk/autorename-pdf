@@ -1428,7 +1428,7 @@ fn profiles_group(
 
 /// Example filename for a profile: sample values (with the form's codes,
 /// amount and date format) through the real naming code.
-pub fn sample_name(id: &str, prof: &Profile, f: &SettingsForm) -> String {
+pub fn sample_name(_id: &str, prof: &Profile, f: &SettingsForm) -> String {
     let sample = |k: &str| -> String {
         match k {
             "document_date" => "03.11.2025".into(),
@@ -1455,9 +1455,14 @@ pub fn sample_name(id: &str, prof: &Profile, f: &SettingsForm) -> String {
     if let Some(a) = &prof.amount {
         fields.insert(a.amount.clone(), "12,13".into());
         fields.insert(a.currency.clone(), "EUR".into());
-        autorename_core::pipeline::derive_amount(a, &mut fields, &f.amount_format);
+        autorename_core::pipeline::derive_amount(
+            a,
+            &mut fields,
+            &f.amount_format,
+            &f.decimal_separator,
+        );
     }
-    autorename_core::naming::render_filename(id, prof, &fields, &f.date_format)
+    autorename_core::naming::render_filename(prof, &fields, &f.date_format)
 }
 
 fn company_group(ui: &mut Ui, m: &mut Model) {
@@ -1467,10 +1472,13 @@ fn company_group(ui: &mut Ui, m: &mut Model) {
         "Your company",
         "Tells bills you receive from invoices you send.",
     );
-    Field::new("Your company name", &mut f.company)
-        .label("Your company name")
+    Field::new("Your company names", &mut f.company)
+        .label("Your company names")
         .hint("e.g. ACME GmbH")
-        .helper(Some("Never used as the other party in a name."))
+        .helper(Some(
+            "One per line, as printed on invoices: company, trading or old names, your own name. Never used as the other party in a name.",
+        ))
+        .multiline(3)
         .width(theme::TEXT_EDIT_W)
         .show(ui);
     if f.company.trim().is_empty() {
@@ -1602,7 +1610,10 @@ fn amount_format(ui: &mut Ui, m: &mut Model) {
     if !fmts.contains(&f.amount_format) {
         fmts.push(f.amount_format.clone());
     }
-    let opts: Vec<String> = fmts.iter().map(|a| amount_example(a)).collect();
+    let opts: Vec<String> = fmts
+        .iter()
+        .map(|a| amount_example(a, &f.decimal_separator))
+        .collect();
     let mut sel = fmts.iter().position(|a| *a == f.amount_format).unwrap_or(0);
     field_label(ui, "Amount");
     let (_, changed) = Select {
@@ -1618,6 +1629,31 @@ fn amount_format(ui: &mut Ui, m: &mut Model) {
     }
     if let Some(e) = f.problem(FormField::AmountFormat) {
         status_line(ui, Tone::Danger, &e);
+    }
+    ui.add_space(space::LG);
+    let seps = autorename_core::config::DECIMAL_SEPARATORS;
+    let opts: Vec<String> = seps
+        .iter()
+        .map(|s| match *s {
+            "," => "Comma: 1234,56".to_string(),
+            _ => "Point: 1234.56".to_string(),
+        })
+        .collect();
+    let mut sel = seps
+        .iter()
+        .position(|s| *s == f.decimal_separator)
+        .unwrap_or(0);
+    field_label(ui, "Decimal mark");
+    let (_, changed) = Select {
+        a11y: "Decimal mark",
+        width: theme::TEXT_EDIT_W,
+        options: &opts,
+        enabled: true,
+        mono: false,
+    }
+    .show(ui, &mut sel);
+    if changed {
+        f.decimal_separator = seps[sel].to_string();
     }
 }
 

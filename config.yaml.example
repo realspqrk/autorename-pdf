@@ -11,7 +11,7 @@
 # `${VAR}` reads the environment first, then a .env file beside this file.
 # Check with: autorename-pdf config validate
 #
-# Default filename (profile: business):  20260906 ACME AP 12,13.pdf
+# Default filename (profile: business):  20260906 ACME AP EUR 12.13.pdf
 #   date · counterparty · AP (bill you received) / AR (invoice you sent) · printed total
 # Recipes: examples/ (academic, er-ar, invoice-id, ollama-offline, vision-cloud)
 config_version: 4
@@ -36,8 +36,11 @@ pdf:
   # Decided per page (the first max_pages pages).
   ocr: auto                     # true | false | auto. auto = pages scoring below the threshold.
                                 # Needs `autorename-pdf models fetch`; auto without models:
-                                # warning `ocr_models_missing`, then vision. true without models: error.
-  vision: auto                  # true | false | auto. auto = only pages still below it after OCR.
+                                # warning `ocr_models_missing` (unreadable pages then go to vision).
+                                # true without models: error.
+  vision: auto                  # true | false | auto. auto = only pages still unreadable: below the
+                                # threshold after OCR, or (without OCR) by their own text score;
+                                # the picture cap below never sends a clean text page to vision.
                                 # privacy: offline sends images to the local Ollama model only.
   text_quality_threshold: 0.8   # per-page score (0..1). Text-layer readability: 1 = clean text, any
                                 # length; replacement/private-use/control chars and leftover mojibake
@@ -53,12 +56,16 @@ ocr:
   threads: 4                    # CPU threads for OCR inference
 
 company:
-  name: ""                      # YOUR company: excluded as counterparty, tells AP from AR
+  names: []                     # YOUR names as printed on invoices: company, trading or former
+                                # names, your own name, e.g. ["Spqrk GmbH", "Jane Doe"]. Any match
+                                # = you: never the counterparty, tells AP from AR
 
 output:
   language: English             # language of non-invoice document types (Letter, Contract, ...)
   date_format: "%Y%m%d"         # strftime; incomplete dates render as 00000000
   amount_format: "{currency} {amount}"  # invoice amount in names, e.g. "{amount} {currency}"
+  decimal_separator: "."        # "." (1234.56) or "," (1234,56). Amounts are written with this
+                                # mark and no thousands grouping, whatever the PDF prints
 
 enrich:
   enabled: true                 # embed Title/Subject/Keywords, XMP and an autorename-pdf.json

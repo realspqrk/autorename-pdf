@@ -736,7 +736,7 @@ fn decider_ai_uses_enum_schema() {
 }
 
 #[test]
-fn decider_openai_decisions_best_effort() {
+fn decider_openai_decisions_choice_question() {
     let mock = serve(vec![reply(200, "openai_decisions_success.json")]);
     let p = settings(Provider::OpenAi, String::new());
     let cfg = decider(
@@ -750,8 +750,9 @@ fn decider_openai_decisions_best_effort() {
     assert_eq!(q.path, "/v1/decisions");
     assert_eq!(q.header("authorization"), Some("Bearer dec-key"));
     assert_eq!(q.body["model"], "gpt-6-luna");
-    assert_eq!(q.body["type"], "choice");
-    assert_eq!(q.body["options"].as_array().unwrap().len(), 3);
+    let question = &q.body["questions"][0];
+    assert_eq!(question["type"], "choice");
+    assert_eq!(question["choices"].as_array().unwrap().len(), 3);
 }
 
 #[test]

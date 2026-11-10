@@ -1,6 +1,6 @@
 # Fully local: Ollama LLM + built-in OCR. No API key; no cloud request is
 # allowed (anything non-local is an error, exit 3).
-# Filename: 20260906 ACME AP 12,13.pdf (business profile)
+# Filename: 20260906 ACME AP EUR 12.13.pdf (business profile)
 #
 # Easiest: `autorename-pdf setup --offline --ollama-model <model> --company <you>`
 # writes the same settings. Before going offline:
