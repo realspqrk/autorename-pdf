@@ -4,6 +4,7 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 ## TOC
 
+- [User feedback 4.0 beta](#user-feedback-40-beta)
 - [Validation gaps](#validation-gaps)
 - [Scanner / image ingest](#scanner--image-ingest)
 - [Enrichment](#enrichment)
@@ -11,6 +12,13 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 - [Decision models](#decision-models)
 - [Packaging and OS integration](#packaging-and-os-integration)
 - [Auto-updater](#auto-updater)
+
+## User feedback 4.0 beta
+
+- **Several own names**: `company.name` is one string, used by the prompt (`profiles.rs::company_name_description`) and by `pipeline::is_my_company` / `derive_direction`. Mail to a second own name (person vs. business, e.g. "Gerhard Petermeir" and "SPQRK IT-Services") ends as `direction_uncertain` ("It's unclear whether you sent or received this"). Replace it with `company.names: [..]` (any match = me; all named in the prompt). GUI: one name per line (commas and semicolons occur in legal names). Check real samples with `pdf-debugger` first: issuer/recipient may also come back empty.
+- **Mouse parity**: inline name edit (`gui/screens/preview.rs`, "Enter to save, Esc to cancel") has no buttons and takes focus back on click-away. Add Save/Cancel buttons. Audit every screen so each action works by mouse alone and by keyboard alone (row double-click, Esc-only modal close in `companies.rs`/`settings.rs`); add the rule to the GUI spec review checklist and one GUI test per flow.
+- **Scan language select**: with one pack (`ocr::PACKS` = `latin`), "Automatic" and "Latin script" do the same thing. While only one pack exists, show a read-only line ("Reads Latin-script languages: English, German, French + 45 more", full list on hover) instead of the select; bring the select back with the second pack (see [OCR language packs](#ocr-language-packs)).
+- **Custom profiles in Settings**: a `profiles:` overlay renders generically on Naming (radio card, label from the id, template caption, sample name from field labels; only the settings the profile uses are shown); fields and template are edited in the file. No GUI test covers a third profile: add one snapshot with a new profile id (e.g. `receipts` with an `invoice_id` field, like `examples/invoice-id.yaml` but not overriding `business`) and check the card text and sample name.
 
 ## Validation gaps
 
