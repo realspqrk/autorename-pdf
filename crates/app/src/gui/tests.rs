@@ -133,7 +133,7 @@ fn readme_preview() -> Model {
 }
 
 /// README/guide screenshots (`docs/images/gui-<screen>-<light|dark>.png`)
-/// at 1280 × 800. Refreshed with the other snapshots
+/// at 1280 × 800 (framing: `readme_frame`). Refreshed with the other snapshots
 /// (`UPDATE_SNAPSHOTS=force`), so the docs never show an old UI.
 fn readme_screens() -> Vec<Screen> {
     vec![
@@ -155,13 +155,49 @@ fn readme_screens() -> Vec<Screen> {
     ]
 }
 
+/// How a README still is framed so it shows only complete groups: window
+/// height, and an optional node scrolled to a fixed top.
+fn readme_frame(screen: &str) -> (f32, Option<(&'static str, f32)>) {
+    match screen {
+        // Your company + the whole Name format group (codes, date, amount,
+        // decimal mark, document type language).
+        "settings" => (768.0, Some(("Your company names", 176.0))),
+        // Privacy + AI provider; the long Reading group starts below.
+        "offline" => (720.0, None),
+        _ => (SIZES[0].1, None),
+    }
+}
+
+/// Scroll the page under the pointer until `label`'s top is at `top`.
+fn scroll_node_to(h: &mut Harness<'_, App>, label: &str, top: f32) {
+    let dy = h.get_by_label(label).rect().top() - top;
+    h.hover_at(egui::pos2(SIZES[0].0 / 2.0, 400.0));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: theme::v2(0.0, -dy),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    let now = h.get_by_label(label).rect().top();
+    assert!((now - top).abs() < 1.0, "{label} at {now}, wanted {top}");
+    // No pointer (or hover state) in the still.
+    h.event(egui::Event::PointerGone);
+    h.run();
+}
+
 #[test]
 fn readme_screenshots() {
     let _gpu = gpu_lock();
     let mut results = SnapshotResults::new();
     for (screen, model) in readme_screens() {
+        let (height, anchor) = readme_frame(screen);
         for dark in [false, true] {
-            let mut h = harness(model, SIZES[0], dark);
+            let mut h = harness(model, (SIZES[0].0, height), dark);
+            if let Some((label, top)) = anchor {
+                scroll_node_to(&mut h, label, top);
+            }
             let opts = SnapshotOptions::new().output_path("../../docs/images");
             let name = format!("gui-{screen}-{}", if dark { "dark" } else { "light" });
             results.add(h.try_snapshot_options(name, &opts));
@@ -658,6 +694,63 @@ fn setup_save_writes_config_with_company() {
     // Pre-fill from an existing config.
     let m = Model::new(ConfigState::load(Some(&path), false));
     assert_eq!(m.setup.company, "ACME \"Nord\" GmbH");
+}
+
+/// Setup card key gate (Settings' rule): a cloud provider without a typed
+/// or found key disables Save and Test with a reason line; a typed key, a
+/// key in `.env` or Ollama enable them. No network test is required.
+#[test]
+fn setup_requires_a_key_for_cloud_providers() {
+    use super::model::{PROVIDERS, key_var};
+    // A provider whose key is not set in this process (hermetic).
+    let Some(i) = (0..4).find(|&i| std::env::var(key_var(PROVIDERS[i].0)).is_err()) else {
+        return;
+    };
+    let name = PROVIDERS[i].1;
+    let model = move || {
+        let mut m = demo::empty_model();
+        m.setup.provider = i;
+        m
+    };
+    let m = model();
+    let reason = format!("Add your {name} API key to continue.");
+    assert_eq!(m.setup_blocker().as_deref(), Some(reason.as_str()));
+    let mut typed = model();
+    typed.setup.api_key = "sk-test".into();
+    assert_eq!(typed.setup_blocker(), None);
+    let mut dotenv = model();
+    dotenv
+        .config
+        .env
+        .insert(key_var(PROVIDERS[i].0).into(), "sk-env".into());
+    assert_eq!(dotenv.setup_blocker(), None, "a key in .env counts");
+    let mut ollama = model();
+    ollama.setup.offline = true;
+    assert_eq!(ollama.setup_blocker(), None);
+
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::empty_model, SIZES[0], false);
+    h.state_mut().m.setup.provider = i;
+    h.run();
+    for b in ["Save and continue", "Test connection"] {
+        assert!(h.get_by_label(b).accesskit_node().is_disabled(), "{b}");
+    }
+    tab_to(&mut h, |l| l == "API key");
+    for c in "sk-test".chars() {
+        h.event(egui::Event::Text(c.to_string()));
+    }
+    h.run();
+    for b in ["Save and continue", "Test connection"] {
+        assert!(!h.get_by_label(b).accesskit_node().is_disabled(), "{b}");
+    }
+    // A direct save without a key writes nothing.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.yaml");
+    let mut m = Model::new(super::model::ConfigState::load(Some(&path), false));
+    m.setup.provider = i;
+    let (mut app, ctx) = bare_app(m);
+    app.act(&ctx, super::screens::Action::SaveSetup);
+    assert!(!path.exists(), "nothing saved without a key");
 }
 
 /// Ctrl+Enter only triggers the visible, enabled primary of the current
@@ -1308,17 +1401,17 @@ fn ocr_route_status_and_threshold() {
     assert!(
         ocr_status(0, false, true, false)
             .1
-            .contains("scans go to AI vision")
+            .contains("the AI reads scans from page images")
     );
     assert!(
         ocr_status(1, false, true, false)
             .1
-            .contains("scans will fail until you download")
+            .contains("scans fail until you download it")
     );
     assert_eq!(ocr_status(1, false, true, false).0, Tone::Danger);
     assert_eq!(
         ocr_status(0, false, true, true).1,
-        "Auto · downloading models — scans go to AI vision until done"
+        "Auto · downloading the scan reader; until it's ready, the AI reads scans from page images"
     );
     assert!(
         vision_status(0, true, "Ollama", "gemma4")
@@ -2949,6 +3042,34 @@ fn failure_banner_points_to_history_when_the_journal_is_unreadable() {
     assert!(other.action.is_none());
 }
 
+/// History error state: plain-words reset explanation plus Open folder
+/// (the journal's folder, on the worker) and Copy path; nothing resets
+/// automatically.
+#[test]
+fn history_error_offers_folder_and_path() {
+    use super::screens::history::RESET_COPY;
+    let _gpu = gpu_lock();
+    let mut h = harness(demo::history_error_model, SIZES[0], false);
+    let path = h.state().m.history.path.clone().expect("journal path");
+    assert!(RESET_COPY.contains("no longer be undone"));
+    h.get_by_label("Open folder").click();
+    h.run();
+    assert_eq!(
+        h.state().opened().last().map(std::path::PathBuf::as_path),
+        path.parent()
+    );
+    h.get_by_label("Copy path").click();
+    h.run();
+    let toasts: Vec<String> = h.state().m.toasts.iter().map(|t| t.text.clone()).collect();
+    assert!(
+        toasts
+            .iter()
+            .any(|t| t == "Copied the path of journal.json"),
+        "{toasts:?}"
+    );
+    assert!(h.state().m.history.error.is_some(), "no automatic reset");
+}
+
 /// Starts the inline edit of row 1 with the mouse (hover → pencil).
 fn mouse_edit_row1(h: &mut Harness<'_, App>) {
     h.get_by_label_contains("invoice (2).pdf, ").hover();
@@ -3164,7 +3285,7 @@ fn receipts_model() -> Model {
 }
 
 /// Custom profile (§4.7 Naming): its card reads like the built-ins (label
-/// from the id, template caption, sample name from field labels), and the
+/// from the id, template caption, an id-like sample value), and the
 /// page shows only the settings it uses (date only). Snapshot.
 #[test]
 fn custom_profile_renders_generically() {
@@ -3176,7 +3297,7 @@ fn custom_profile_renders_generically() {
     assert_eq!(template_caption(r), "Date, company, invoice ID");
     assert_eq!(
         sample_name("receipts", r, &m.settings.form),
-        "20251103 Northwind Invoice ID.pdf"
+        "20251103 Northwind INV-1042.pdf"
     );
     assert_eq!(
         Uses::of(&tree, "receipts"),
@@ -3191,7 +3312,7 @@ fn custom_profile_renders_generically() {
     for size in SIZES {
         for dark in [false, true] {
             let mut h = harness(receipts_model, size, dark);
-            h.get_by_label("Receipts profile, for example 20251103 Northwind Invoice ID.pdf");
+            h.get_by_label("Receipts profile, for example 20251103 Northwind INV-1042.pdf");
             assert!(h.query_by_label_contains("Your company").is_none());
             assert!(h.query_by_label_contains("Amount format").is_none());
             assert!(h.query_by_label("Name matching").is_none(), "no name tab");

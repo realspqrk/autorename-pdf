@@ -55,7 +55,8 @@ pub enum Action {
     CancelEdit,
     ResetName(usize),
     DontLearn(usize),
-    CopyText(String),
+    /// Copy to the clipboard, then show the toast.
+    CopyText(String, &'static str),
     OpenPath(PathBuf),
     TestSetup,
     TestSettings,

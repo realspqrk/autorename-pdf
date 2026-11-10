@@ -5,8 +5,8 @@ use egui::{Rect, Ui};
 use super::Action;
 use crate::gui::components::plan_row::{PlanRow, RowStatus, RowView, TEXT_X};
 use crate::gui::components::{
-    Button, Field, Progress, galley, in_rect, paint_card, paint_galley_v, paint_icon, paint_text,
-    plural, segmented,
+    Button, Field, Progress, ellipsize_middle, galley, in_rect, paint_card, paint_galley_v,
+    paint_icon, paint_text, plural, segmented,
 };
 use crate::gui::model::{self, Filter, Model, Phase, Row};
 use crate::gui::theme::{self, Tone, size, space, stroke, typ};
@@ -364,7 +364,8 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
         let Some((_, text)) = m.editing.as_mut() else {
             return;
         };
-        let helper = format!("from {old}");
+        // One line in the row: a long original name shortens in the middle.
+        let helper = ellipsize_middle(ui, &format!("from {old}"), typ::CAPTION, fr.width());
         let resp = Field::new("Edit proposed name", text)
             .mono()
             .suffix(".pdf")

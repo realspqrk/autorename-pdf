@@ -433,7 +433,7 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
             ui.add_space(space::LG);
             let (pid, pname) = PROVIDERS[m.setup.provider];
             let var = crate::gui::model::key_var(pid);
-            let found = std::env::var(var).is_ok() || m.config.env.contains_key(var);
+            let found = m.setup_blocker().is_none();
             row(ui, "API key", |ui| {
                 let shown = &mut m.setup.show_key;
                 Field::new("API key", &mut m.setup.api_key)
@@ -479,7 +479,7 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
             // helper, no warning here (Settings keeps its status).
             Field::new("Your company (optional)", &mut m.setup.company)
                 .label("Your company (optional)")
-                .hint("e.g. ACME GmbH")
+                .hint("e.g. Northwind Traders Ltd")
                 .helper(Some(COMPANY_HELPER))
                 .width(theme::TEXT_EDIT_W)
                 .show(ui);
@@ -491,16 +491,23 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
         inner.max,
     );
     let mut left_edge = bar.right();
+    // Same key rule as Settings' save blocker; no network test required.
+    let blocker = m.setup_blocker();
     in_rect(ui, bar, |ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = space::SM;
-            let save = Button::primary("Save and continue").show(ui);
-            if save.clicked() {
+            let mut save = Button::primary("Save and continue").enabled(blocker.is_none());
+            let mut test = Button::secondary("Test connection")
+                .enabled(blocker.is_none())
+                .loading(m.setup_testing);
+            if let Some(b) = &blocker {
+                save = save.tooltip(b.clone());
+                test = test.tooltip(b.clone());
+            }
+            if save.show(ui).clicked() {
                 acts.push(Action::SaveSetup);
             }
-            let test = Button::secondary("Test connection")
-                .loading(m.setup_testing)
-                .show(ui);
+            let test = test.show(ui);
             if test.clicked() {
                 acts.push(Action::TestSetup);
             }
@@ -510,6 +517,9 @@ fn setup_card(ui: &mut Ui, rect: Rect, m: &mut Model, acts: &mut Vec<Action>) {
     let fb = Rect::from_min_max(bar.min, egui::pos2(left_edge - space::MD, bar.bottom()));
     let feedback = if let Some(e) = &m.setup.error {
         Some((Tone::Danger, tone_icon(Tone::Danger), e.clone()))
+    } else if let Some(b) = blocker {
+        // Why the primary is disabled (the key row says what is missing).
+        Some((Tone::Neutral, theme::icon::INFO, b))
     } else if m.setup.offline {
         None
     } else {

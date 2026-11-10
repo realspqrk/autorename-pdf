@@ -108,7 +108,7 @@ fn body(ui: &mut Ui, m: &Model, i: usize, row: &Row, acts: &mut Vec<Action>) {
         .show_at(ui, b1)
         .clicked()
     {
-        acts.push(Action::CopyText(path.clone()));
+        acts.push(Action::CopyText(path.clone(), "Copied the original path"));
     }
     let b2 = b1.translate(theme::v2(size::CONTROL_SM + space::XS, 0.0));
     if Button::icon_only(theme::icon::EXTERNAL_LINK, "Open file")
@@ -390,16 +390,16 @@ fn company_match(
             format!("Will be added to the {many} list on rename."),
         ),
         (Some(LearnAction::NewEntry { review: true, .. }), Some(LearnStatus::EntryAdded)) => (
-            "Review",
+            "Needs a look",
             Tone::Warning,
             theme::icon::FLAG,
-            format!("Added to the {many} list and flagged for review."),
+            format!("Added to the {many} list for you to check in Name matching."),
         ),
         (Some(LearnAction::NewEntry { review: true, .. }), _) if !done => (
-            "Review",
+            "Needs a look",
             Tone::Warning,
             theme::icon::FLAG,
-            format!("Will be added to the {many} list and flagged for review."),
+            format!("Will be added to the {many} list for you to check in Name matching."),
         ),
         (Some(LearnAction::NewEntry { .. }), Some(LearnStatus::EntryAdded)) => (
             new_badge.as_str(),
