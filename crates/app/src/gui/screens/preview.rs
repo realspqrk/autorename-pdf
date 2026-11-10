@@ -173,6 +173,10 @@ pub fn list(
         );
     }
     let lr = Rect::from_min_max(egui::pos2(rect.left(), top), rect.max);
+    if m.editing.is_none() {
+        // The next edit (even of the same row) focuses its field again.
+        ui.data_mut(|d| d.remove::<usize>(egui::Id::unique("inline_edit").with("armed")));
+    }
     let visible = m.visible();
     in_rect(ui, lr, |ui| {
         egui::ScrollArea::vertical()
@@ -236,8 +240,76 @@ pub fn list(
                         acts.push(Action::Activate(i));
                         acts.push(Action::StartEdit(i));
                     }
+                    if let Some(resp) = &out.row {
+                        if resp.secondary_clicked() {
+                            acts.push(Action::Activate(i));
+                        }
+                        row_menu(resp, m, i, acts);
+                    }
                 }
             });
+    });
+}
+
+/// Right-click menu: the row shortcuts (§8) as visible controls, each with
+/// its key, so nothing is keyboard-only (checklist 13).
+fn row_menu(resp: &egui::Response, m: &Model, i: usize, acts: &mut Vec<Action>) {
+    use egui::{Key, KeyboardShortcut, Modifiers};
+    let r = &m.rows[i];
+    let plan = m.report.is_none() && !m.busy();
+    let editable = plan && matches!(r.status(), RowStatus::Ready | RowStatus::Review);
+    resp.context_menu(|ui| {
+        let ctx = ui.ctx().clone();
+        let mut item = |ui: &mut Ui, label: &str, mods: Modifiers, key: Key, act: Action| {
+            let sc = ctx.format_shortcut(&KeyboardShortcut::new(mods, key));
+            let b = egui::Button::new(label).shortcut_text(sc);
+            if ui
+                .add_sized(theme::v2(ui.available_width(), size::CONTROL), b)
+                .clicked()
+            {
+                acts.push(act);
+                ui.close();
+            }
+        };
+        ui.set_min_width(size::COMBO_W * 2.0);
+        if editable {
+            item(
+                ui,
+                "Edit name",
+                Modifiers::NONE,
+                Key::F2,
+                Action::StartEdit(i),
+            );
+        }
+        item(
+            ui,
+            "Open",
+            Modifiers::NONE,
+            Key::O,
+            Action::OpenPath(r.current_path(&m.restored).to_path_buf()),
+        );
+        if m.report.is_none() && r.checkable() {
+            let l = if r.checked { "Exclude" } else { "Include" };
+            item(ui, l, Modifiers::NONE, Key::Space, Action::Toggle(i));
+        }
+        if m.report.is_none() {
+            item(
+                ui,
+                "Include all",
+                Modifiers::COMMAND,
+                Key::A,
+                Action::IncludeAll,
+            );
+        }
+        if plan && m.editing.is_none() {
+            item(
+                ui,
+                "Remove from list",
+                Modifiers::NONE,
+                Key::Delete,
+                Action::RemoveRow(i),
+            );
+        }
     });
 }
 
@@ -262,25 +334,48 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
         egui::pos2(rr.right() - space::LG, rr.bottom()),
     );
     let old = m.rows[i].old_name();
+    // Save / Cancel beside the field (mouse parity with Enter / Esc), on the
+    // field's 32 h line. Not Tab stops: Tab leaves the field and commits.
+    let save = Button::secondary("Save")
+        .icon(theme::icon::CHECK)
+        .a11y("Save name")
+        .no_tab()
+        .enabled(err.is_none());
+    let cancel = Button::ghost("Cancel").a11y("Cancel name edit").no_tab();
+    let (sw, cw) = (save.width(ui), cancel.width(ui));
+    let cancel_r = Rect::from_min_size(
+        egui::pos2(fr.right() - cw, fr.top()),
+        theme::v2(cw, size::CONTROL),
+    );
+    let save_r = Rect::from_min_size(
+        egui::pos2(cancel_r.left() - space::SM - sw, fr.top()),
+        theme::v2(sw, size::CONTROL),
+    );
+    let fr = Rect::from_min_max(fr.min, egui::pos2(save_r.left() - space::SM, fr.bottom()));
+    let saved = save.show_at(ui, save_r).clicked();
+    let cancelled = cancel.show_at(ui, cancel_r).clicked();
+    let fid = egui::Id::unique("inline_edit");
+    // Focus the field once when the edit opens; afterwards a click
+    // elsewhere commits (Finder/Explorer rename) instead of focus coming back.
+    let armed = fid.with("armed");
+    let focus_now = ui.data(|d| d.get_temp::<usize>(armed)) != Some(i);
     in_rect(ui, fr, |ui| {
         ui.spacing_mut().item_spacing = theme::v2(0.0, space::XS);
         let Some((_, text)) = m.editing.as_mut() else {
             return;
         };
-        let fid = egui::Id::unique("inline_edit");
-        let helper = format!("from {old} · Enter to save, Esc to cancel");
-        // The error keeps the way out visible (§4.3).
-        let shown_err = err.as_ref().map(|e| format!("{e} · Esc to cancel"));
+        let helper = format!("from {old}");
         let resp = Field::new("Edit proposed name", text)
             .mono()
             .suffix(".pdf")
-            .error(shown_err.as_deref())
+            .error(err.as_deref())
             .helper(Some(&helper))
             .id(fid)
             .show(ui)
             .edit;
-        if !resp.has_focus() && !resp.lost_focus() {
+        if focus_now {
             resp.request_focus();
+            ui.data_mut(|d| d.insert_temp(armed, i));
         }
         let (enter, esc) = ui.input(|i| {
             (
@@ -288,12 +383,21 @@ fn edit_row(ui: &mut Ui, rr: Rect, m: &mut Model, i: usize, acts: &mut Vec<Actio
                 i.key_pressed(egui::Key::Escape),
             )
         });
-        if esc {
+        if esc || cancelled {
             acts.push(Action::CancelEdit);
-        } else if enter && err.is_none() {
-            acts.push(Action::CommitEdit);
-        } else if enter {
-            resp.request_focus();
+        } else if saved {
+            acts.push(Action::CommitEdit { refocus: true });
+        } else if enter && resp.lost_focus() {
+            if err.is_none() {
+                acts.push(Action::CommitEdit { refocus: true });
+            } else {
+                // Keyboard: an invalid name keeps the caret in the field.
+                resp.request_focus();
+            }
+        } else if resp.lost_focus() {
+            // Click away (or Tab): commit when valid; an invalid name stays
+            // in edit with its error, unfocused.
+            acts.push(Action::CommitEdit { refocus: false });
         }
     });
 }

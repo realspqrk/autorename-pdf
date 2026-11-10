@@ -40,8 +40,16 @@ pub enum Action {
     ToggleDetails,
     Activate(usize),
     Toggle(usize),
+    /// Check every checkable row (Ctrl+A, row menu).
+    IncludeAll,
+    /// Remove a row from the plan, not from disk (Delete, row menu).
+    RemoveRow(usize),
     StartEdit(usize),
-    CommitEdit,
+    /// Commit the inline edit if valid; `refocus` returns focus to the row
+    /// (Enter, Save); after a click away focus stays where it went.
+    CommitEdit {
+        refocus: bool,
+    },
     CancelEdit,
     ResetName(usize),
     DontLearn(usize),
