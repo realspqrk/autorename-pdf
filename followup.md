@@ -4,7 +4,7 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 ## TOC
 
-- [After 4.0.0-beta.2](#after-400-beta2)
+- [After 4.0.0-beta.3](#after-400-beta3)
 - [Validation gaps](#validation-gaps)
 - [Scanner / image ingest](#scanner--image-ingest)
 - [Enrichment](#enrichment)
@@ -13,12 +13,14 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 - [Packaging and OS integration](#packaging-and-os-integration)
 - [Auto-updater](#auto-updater)
 
-## After 4.0.0-beta.2
+## After 4.0.0-beta.3
 
-4.0.0-beta.2 shipped 2026-11-10 as GitHub Latest. Next: collect beta.2 feedback, then 4.0.0 (`playbooks/release.md`).
+4.0.0-beta.2 shipped 2026-11-10 as GitHub Latest. beta.3 (Google Drive rename fix, system clipboard, toolchain pin) prepared 2026-11-19 on branch `fix/drivefs-rename-clipboard`; built, signed and published from the main machine (`playbooks/release.md`). Next: collect beta.3 feedback, then 4.0.0.
 
 - **Details grid for custom profiles**: `screens/detail.rs` always shows the business rows (Company, Date, Type, Total/Subject); a custom profile plan (e.g. `receipts`) shows "Type —", "Subject —". Derive the rows from the plan profile's fields.
 - **Real test PDFs**: `.todo/real-pdfs/` holds 18 real documents for local runs (git-ignored; never commit, never move into fixtures). See its README.
+
+- **Rename rollback failure**: when `naming::rename_file_checked` cannot move a mismatched file back (the source name was re-created meanwhile), it still returns `source_changed` and the GUI offers Retry on the source path. Give it its own code ("check both paths"), exclude the row from Retry.
 
 ## Validation gaps
 
@@ -51,6 +53,7 @@ Evaluated 2026-11-07. The default `ai` decider uses the main provider. `harmoniz
 - Worth adding only when needed: (1) a calibrated `needs_review` flag for low-confidence renames; (2) tie-break of ambiguous company matches as a `choice` over ≤ 255 aliases. Docs: developers.openai.com/api/docs/guides/decisions, docs.typesafe.ai/models.
 
 ## Packaging and OS integration
+- **Unpin Rust 1.99.1** (`rust-toolchain.toml`): needs an ort-sys whose `copy-dylibs` handles cargo's build-dir layout v2 (rc.13 copies DirectML.dll into `target/<profile>/build/`). ort comes via oar-ocr (`=2.0.0-rc.13`); check a newer oar-ocr/ort (ONNX Runtime bump: rerun OCR accuracy + Windows VM validation), then a fresh-target Windows `xtask dist`.
 - Unsigned Windows installers can trip Defender ML heuristics (seen once: `Program:Win32/Contebrew.A!ml` when the NSIS script deleted old program files; cleanup moved into `integrate install`). Ship only Azure-signed installers (`cargo xtask sign`).
 - AppImage without FUSE: menu entries rely on the documented extract-to-`~/.local/opt/autorename-pdf` + `integrate install` route; an Exec that works mounted and extracted is not implemented.
 
