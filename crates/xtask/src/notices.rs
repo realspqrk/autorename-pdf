@@ -98,27 +98,47 @@ fn crates(root: &Path) -> Result<String, String> {
             .current_dir(root)
             .args(["fetch", "--locked"]),
     )?;
-    let out = Command::new(cargo())
-        .current_dir(root)
-        .args([
-            "about",
-            "generate",
-            "--offline",
-            "--locked",
-            "--fail",
-            "-m",
-            "crates/app/Cargo.toml",
-            "-c",
-            "about.toml",
-            "about.hbs",
-        ])
-        .stderr(std::process::Stdio::inherit())
-        .output()
-        .map_err(|e| format!("cargo about: {e}"))?;
-    if !out.status.success() {
-        return Err(format!("cargo about failed ({})", out.status));
-    }
-    resolve_stubs(&String::from_utf8_lossy(&out.stdout))
+    // `-o`, not stdout: on Windows cargo-about refuses a redirected stdout.
+    // Into a fresh directory only this run created (`create` fails if it
+    // exists; 0700 on Unix), removed on every path.
+    let dir = std::env::temp_dir().join(format!(
+        "arp-notices-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    ));
+    #[cfg(unix)]
+    let made = {
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new().mode(0o700).create(&dir)
+    };
+    #[cfg(not(unix))]
+    let made = fs::create_dir(&dir);
+    made.map_err(|e| format!("{}: {e}", dir.display()))?;
+    let file = dir.join("notices.md");
+    let text = exec(
+        Command::new(cargo())
+            .current_dir(root)
+            .args([
+                "about",
+                "generate",
+                "--offline",
+                "--locked",
+                "--fail",
+                "-m",
+                "crates/app/Cargo.toml",
+                "-c",
+                "about.toml",
+                "-o",
+            ])
+            .arg(&file)
+            .arg("about.hbs"),
+    )
+    .and_then(|()| fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display())));
+    let _ = fs::remove_dir_all(&dir);
+    let text = text?;
+    resolve_stubs(&text)
 }
 
 fn lf(s: &str) -> String {

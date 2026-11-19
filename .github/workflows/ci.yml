@@ -18,9 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      - run: rustup toolchain install  # rust-toolchain.toml
       - run: cargo fmt --all --check
 
   test:
@@ -32,9 +30,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      - run: rustup toolchain install  # rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - name: Fetch PDFium
         run: cargo xtask fetch-natives
@@ -52,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install  # rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
@@ -70,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install  # rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - name: No secrets in the pushed commits
         env:

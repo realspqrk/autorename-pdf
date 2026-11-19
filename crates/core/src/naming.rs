@@ -361,28 +361,37 @@ pub fn strip_collision_suffix(stem: &str) -> &str {
 /// Rename `src` → `dst`; the OS refuses to replace any existing entry at
 /// `dst` (see [`fsx::rename_noreplace`]). Retries on permission/busy errors
 /// (Windows: file open in a viewer). `retries` attempts, `delay` apart. The
-/// moved object must be the one present when the attempt started.
+/// moved file must be the one present when the attempt started.
 pub fn rename_file(
     src: &Path,
     dst: &Path,
     retries: u32,
     delay: Duration,
 ) -> Result<fsx::Committed> {
-    rename_file_checked(src, dst, retries, delay, &|| {
-        fsx::path_id(src).map_err(|e| Error::io(src, e))
-    })
+    rename_file_checked(
+        src,
+        dst,
+        retries,
+        delay,
+        &|| fsx::path_id(src).map_err(|e| Error::io(src, e)),
+        None,
+    )
 }
 
 /// [`rename_file`] with a verification step: `check` runs before *every*
 /// attempt and returns the identity of the verified source. If a different
 /// object ends up at `dst` (swapped between check and rename), it is moved
-/// back and the rename is a [`Error::Conflict`].
+/// back and the rename fails with `source_changed`. A new mtime alone
+/// ([`fsx::FileId::same_after_move`]; Google Drive sets it on rename) is
+/// fine when `sha256` is `None` or still matches the moved bytes (an
+/// equal-length edit during the rename is caught).
 pub fn rename_file_checked(
     src: &Path,
     dst: &Path,
     retries: u32,
     delay: Duration,
     check: &dyn Fn() -> Result<fsx::FileId>,
+    sha256: Option<&str>,
 ) -> Result<fsx::Committed> {
     use std::io::ErrorKind;
     let busy = |k: ErrorKind| matches!(k, ErrorKind::PermissionDenied | ErrorKind::ResourceBusy);
@@ -391,13 +400,44 @@ pub fn rename_file_checked(
         let id = check()?;
         match fsx::rename_noreplace(src, dst) {
             Ok(done) => {
-                if fsx::path_id(dst).ok() != Some(id) {
-                    let _ = fsx::rename_noreplace(dst, src);
-                    return Err(Error::Conflict {
-                        message: format!(
-                            "{} changed while it was being renamed; left in place",
-                            src.display()
+                // Ok(false): another object or other bytes; Err: unreadable.
+                let intact = match fsx::path_id(dst) {
+                    Ok(now) if now == id => Ok(true),
+                    Ok(now) if now.same_after_move(&id) => match sha256 {
+                        None => Ok(true),
+                        // One open: identity and bytes of the same file.
+                        Some(want) => fsx::identify(dst)
+                            .map(|(again, sha)| again.same_after_move(&id) && sha == want),
+                    },
+                    Ok(_) => Ok(false),
+                    Err(e) => Err(e),
+                };
+                if !matches!(intact, Ok(true)) {
+                    let why = match &intact {
+                        Err(e) => format!("could not be read back after the rename ({e})"),
+                        _ => "changed while it was being renamed".to_string(),
+                    };
+                    let message = match fsx::rename_noreplace(dst, src) {
+                        Ok(_) => match intact {
+                            Err(e) => return Err(Error::io(src, e)),
+                            _ => format!("{} {why}; left in place", src.display()),
+                        },
+                        Err(e) if std::fs::symlink_metadata(dst).is_ok() => format!(
+                            "{} {why} and could not be moved back ({e}); it is now {}",
+                            src.display(),
+                            dst.display()
                         ),
+                        Err(e) => format!(
+                            "{} {why} and could not be moved back ({e}); check {} and {} before retrying",
+                            src.display(),
+                            src.display(),
+                            dst.display()
+                        ),
+                    };
+                    return Err(Error::Extract {
+                        code: "source_changed",
+                        message,
+                        hint: Some("Re-run `autorename-pdf rename` to make a fresh plan.".into()),
                     });
                 }
                 return Ok(done);
@@ -554,7 +594,7 @@ mod tests {
             }
         };
         assert_eq!(
-            rename_file_checked(&src, &dst, 3, Duration::ZERO, &check)
+            rename_file_checked(&src, &dst, 3, Duration::ZERO, &check, None)
                 .unwrap_err()
                 .code(),
             "conflict"
@@ -563,9 +603,42 @@ mod tests {
         // A stale identity (object changed after the check) is moved back.
         let stale = fsx::path_id(&src).unwrap();
         std::fs::write(&src, b"newer bytes").unwrap();
-        let e = rename_file_checked(&src, &dst, 1, Duration::ZERO, &|| Ok(stale)).unwrap_err();
-        assert_eq!(e.code(), "conflict");
+        let e =
+            rename_file_checked(&src, &dst, 1, Duration::ZERO, &|| Ok(stale), None).unwrap_err();
+        assert_eq!(e.code(), "source_changed");
         assert_eq!(std::fs::read(&src).unwrap(), b"newer bytes");
+        assert!(!dst.exists());
+    }
+
+    /// Google Drive for desktop sets mtime on rename (cloud-born files):
+    /// same object + same bytes = renamed. An equal-length edit (same object,
+    /// new mtime, other bytes) is still caught when the plan's hash is known.
+    #[test]
+    fn rename_survives_a_filesystem_that_touches_mtime() {
+        let d = tempfile::tempdir().unwrap();
+        let (src, dst) = (d.path().join("a.pdf"), d.path().join("b.pdf"));
+        let touch = |p: &Path, h: u64| {
+            std::fs::File::options()
+                .write(true)
+                .open(p)
+                .unwrap()
+                .set_modified(std::time::SystemTime::now() + Duration::from_secs(h * 3600))
+                .unwrap();
+        };
+        std::fs::write(&src, b"scan").unwrap();
+        let (checked, sha) = fsx::identify(&src).unwrap();
+        touch(&src, 1);
+        let rename =
+            |id| rename_file_checked(&src, &dst, 1, Duration::ZERO, &move || Ok(id), Some(&sha));
+        rename(checked).unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"scan");
+        // Equal-length edit after the check: moved back.
+        std::fs::rename(&dst, &src).unwrap();
+        let checked = fsx::path_id(&src).unwrap();
+        std::fs::write(&src, b"SCAN").unwrap();
+        touch(&src, 2);
+        assert_eq!(rename(checked).unwrap_err().code(), "source_changed");
+        assert_eq!(std::fs::read(&src).unwrap(), b"SCAN");
         assert!(!dst.exists());
     }
 

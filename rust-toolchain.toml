@@ -1,0 +1,7 @@
+# Pinned: cargo 1.100's build-dir layout v2 breaks ort-sys 2.0.0-rc.13
+# `copy-dylibs` (DirectML.dll not next to the exe on Windows). Unpin after
+# moving to an ort that handles the new layout (known.md, Toolchain).
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

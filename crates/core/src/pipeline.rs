@@ -1577,6 +1577,7 @@ fn apply_item(item: &PlanItem, plan: &Plan, st: &mut ApplyState<'_>) -> FileRepo
                 RENAME_RETRIES,
                 RENAME_DELAY,
                 &check,
+                Some(&item.source_sha256),
             ) {
                 Ok(done) => done,
                 Err(e) => return failed(r, &e),

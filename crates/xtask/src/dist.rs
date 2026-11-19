@@ -202,9 +202,16 @@ fn stage(o: &Opts, root: &Path, release: &Path, n: &natives::Native) -> Result<P
         copy(&release.join(&name), &stage.join("bin").join(&name))?;
     }
     // ORT's DirectML build (Windows OCR) imports DirectML.dll; ort-sys copies
-    // the redistributable next to the binaries. Ship it beside the exe.
-    let dml = release.join("DirectML.dll");
-    if o.windows() && dml.is_file() {
+    // the redistributable next to the binaries. Ship it beside the exe:
+    // without it the exe does not start at all.
+    if o.windows() {
+        let dml = release.join("DirectML.dll");
+        if !dml.is_file() {
+            return Err(format!(
+                "{} missing: ort-sys did not copy it next to the exe (cargo's build-dir layout v2 breaks its copy; use the toolchain in rust-toolchain.toml)",
+                dml.display()
+            ));
+        }
         copy(&dml, &stage.join("res/DirectML.dll"))?;
     }
     let lib = natives::lib_path(n);

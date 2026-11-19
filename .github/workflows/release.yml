@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install  # rust-toolchain.toml
       - name: Check tag
         if: github.ref_type == 'tag'
         run: cargo xtask check-tag "${GITHUB_REF_NAME}"
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install  # rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
@@ -57,7 +57,7 @@ jobs:
       WIN_SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install  # rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
 
       - name: Gates

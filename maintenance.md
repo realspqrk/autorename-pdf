@@ -4,6 +4,7 @@ The 4.0 cleanup removed every tracked 3.x file (Python, Tauri GUI, scripts) and 
 
 ## TOC
 - [1. 3.x leftovers in the checkout](#1-3x-leftovers-in-the-checkout)
+- [1b. Windows checkout (D:\Code)](#1b-windows-checkout-dcode)
 - [2. App data from dev and test runs](#2-app-data-from-dev-and-test-runs)
 - [3. Build caches](#3-build-caches)
 - [4. Old 3.x installs (Windows)](#4-old-3x-installs-windows)
@@ -24,6 +25,33 @@ git status --short --ignored   # should show only .env, target/, vendor/ as igno
 ```
 
 `.gitignore` still lists `/venv/` and `__pycache__/` so old checkouts stay clean. Drop those two lines once nobody has a 3.x venv any more.
+
+## 1b. Windows checkout (D:\Code)
+
+Checked 2026-11-19 on the native Windows checkout (all untracked, so git never touched them):
+
+| Path | What | Action |
+|---|---|---|
+| `gui\` (~6.8 GB) | 3.x Tauri GUI: `node_modules`, `src-tauri` build output | Delete. |
+| `Releases\` (~63 MB) | `AutoRename-PDF-Portable-3.2.0.zip` | Delete (3.2.0 stays on GitHub Releases). |
+| `venv\`, `__pycache__\`, `scripts\` (only `__pycache__`), `.coverage` | 3.x Python | Delete. |
+| `.autorename-log.json` | 3.x undo log; 4.0 never reads it | Delete. |
+| `harmonized-company-names.yaml` | 3.x company list | Convert into `name-lists/company_name.yaml` first if you still need it (`docs/migration-3-to-4.md`), then delete. |
+| `screenshot\_raw\` (~119 MB) | Raw screenshots | Yours: keep if they are marketing sources. |
+| `%LOCALAPPDATA%\autorename-pdf\autorename.log` (~3 MB) | 3.x log | Delete. |
+| `%APPDATA%\autorename-pdf\config.yaml` | beta.1 key `company.name` (beta.2+ rejects it) | Change to `company.names: ["…", "…"]`. |
+
+```powershell
+$r = 'D:\Code\autorename-pdf'
+if (-not (Test-Path "$r\Cargo.toml") -or -not (Test-Path "$r\crates\core")) { throw "not the 4.x checkout: $r" }
+$old = 'gui', 'Releases', 'venv', '__pycache__', 'scripts', '.coverage', '.autorename-log.json'
+$tracked = git -C $r ls-files -- $old
+if ($LASTEXITCODE -ne 0 -or $tracked) { throw "git failed or tracked files inside: $tracked" }
+$old | ForEach-Object { Join-Path $r $_ } | Where-Object { Test-Path -LiteralPath $_ } |
+  ForEach-Object { Remove-Item -LiteralPath $_ -Recurse -Force }
+Remove-Item -LiteralPath "$env:LOCALAPPDATA\autorename-pdf\autorename.log" -ErrorAction SilentlyContinue
+git -C $r status --short --ignored   # expect .env, config.yaml, target/, vendor/ (+ the files you kept)
+```
 
 ## 2. App data from dev and test runs
 

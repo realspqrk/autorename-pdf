@@ -16,6 +16,8 @@
 //! - [`lock_path`]/[`lock_exclusive`]: advisory exclusive locks (std `File::lock`:
 //!   `flock` on Unix, `LockFileEx` — mandatory — on Windows).
 //! - [`FileId`]: device/inode (Windows: volume serial/file index) + len + mtime.
+//!   After *our own* move, compare with [`FileId::same_after_move`]: Google
+//!   Drive for desktop sets a cloud-born file's mtime to the rename time.
 
 use std::fs::{File, OpenOptions, Permissions};
 use std::io::{self, Write};
@@ -140,7 +142,8 @@ fn conflict_sibling(path: &Path) -> std::path::PathBuf {
 }
 
 /// Replace `path` with `tmp`, but only if the file being displaced is still
-/// `expected` (same object, length, mtime) with content `expected_sha256`.
+/// `expected` (same object and length; [`FileId::same_after_move`]) with
+/// content `expected_sha256`.
 ///
 /// Move the current file aside to a random sibling (no-replace) → verify the
 /// displaced object → move `tmp` into place (no-replace) → re-verify the
@@ -188,8 +191,10 @@ pub fn replace_verified(
         };
         Error::Conflict { message }
     };
-    let unchanged =
-        || identify(&backup).is_ok_and(|(id, sha)| id == expected && sha == expected_sha256);
+    let unchanged = || {
+        identify(&backup)
+            .is_ok_and(|(id, sha)| id.same_after_move(&expected) && sha == expected_sha256)
+    };
     if !unchanged() {
         return Err(restore("was changed by another program"));
     }
@@ -459,6 +464,15 @@ pub struct FileId {
     ino: u64,
     len: u64,
     mtime: Option<SystemTime>,
+}
+
+impl FileId {
+    /// `self` (read after our own move) is the object `before` named before
+    /// it: same object and length. Not mtime: Google Drive for desktop sets a
+    /// cloud-born file's mtime to the rename time (known.md).
+    pub fn same_after_move(&self, before: &FileId) -> bool {
+        (self.dev, self.ino, self.len) == (before.dev, before.ino, before.len)
+    }
 }
 
 pub fn file_id(f: &File) -> io::Result<FileId> {
@@ -748,6 +762,40 @@ mod tests {
             "conflict"
         );
         assert_eq!(std::fs::read_dir(d.path()).unwrap().count(), 1);
+    }
+
+    /// Google Drive for desktop sets a cloud-born file's mtime to the rename
+    /// time: not "another program changed the file". Another object with the
+    /// same bytes (a sync client's atomic re-save) still is.
+    #[test]
+    fn mtime_set_by_a_move_is_not_a_conflict() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("doc.pdf");
+        std::fs::write(&p, b"v1").unwrap();
+        let (id, sha) = identify(&p).unwrap();
+        let bump = SystemTime::now() + std::time::Duration::from_secs(3600);
+        File::options()
+            .write(true)
+            .open(&p)
+            .unwrap()
+            .set_modified(bump)
+            .unwrap();
+        let moved = path_id(&p).unwrap();
+        assert_ne!(moved, id, "mtime is part of FileId");
+        assert!(moved.same_after_move(&id));
+        let tmp = write_temp(d.path(), b"ours", None).unwrap();
+        replace_verified(&p, tmp, id, &sha).unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"ours");
+        // Same bytes, new object: refused, the other file stays.
+        let (id, sha) = identify(&p).unwrap();
+        write_atomic(&p, b"ours").unwrap();
+        assert!(!path_id(&p).unwrap().same_after_move(&id));
+        let tmp = write_temp(d.path(), b"new", None).unwrap();
+        assert_eq!(
+            replace_verified(&p, tmp, id, &sha).unwrap_err().code(),
+            "conflict"
+        );
+        assert_eq!(std::fs::read(&p).unwrap(), b"ours");
     }
 
     #[test]
