@@ -15,7 +15,7 @@ Open work after 4.0. Done items are removed; the history is in git and `docs/sup
 
 ## After 4.0.0-beta.3
 
-4.0.0-beta.2 shipped 2026-11-10 as GitHub Latest. beta.3 (Google Drive rename fix, system clipboard, toolchain pin) prepared 2026-11-19 on branch `fix/drivefs-rename-clipboard`; built, signed and published from the main machine (`playbooks/release.md`). Next: collect beta.3 feedback, then 4.0.0.
+4.0.0-beta.3 (Google Drive rename fix, system clipboard, toolchain pin) shipped 2026-11-19 as GitHub Latest. Next: collect beta.3 feedback, then 4.0.0 (`playbooks/release.md`).
 
 - **Details grid for custom profiles**: `screens/detail.rs` always shows the business rows (Company, Date, Type, Total/Subject); a custom profile plan (e.g. `receipts`) shows "Type —", "Subject —". Derive the rows from the plan profile's fields.
 - **Real test PDFs**: `.todo/real-pdfs/` holds 18 real documents for local runs (git-ignored; never commit, never move into fixtures). See its README.
